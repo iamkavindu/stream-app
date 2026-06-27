@@ -1,0 +1,14 @@
+HELP.md
+target/
+staging/
+scripts/bin/
+scripts/ffmpeg-release.tar.xz
+ffmpeg-*-amd64-static/
+
+.mvn/wrapper/maven-wrapper.jar
+
+application-local.properties
+application-*.local.properties
+
+hs_err_pid*
+replay_pid*

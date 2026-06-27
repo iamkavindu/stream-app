@@ -1,0 +1,19 @@
+services:
+  postgres:
+    image: postgres:18-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: streamappdb
+      POSTGRES_USER: streamapp
+      POSTGRES_PASSWORD: streamapp
+    volumes:
+      - postgres_data:/var/lib/postgresql/18/docker
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U streamapp -d streamappdb" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_data:

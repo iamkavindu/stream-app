@@ -1,0 +1,32 @@
+### replace hash for testing
+#{
+#  "fileName": "dummy.mp4",
+#  "sha256Hex": "3393e6a28f05e4f55614e8bdda16f6a9ff256b54f34bc7d127979f8d100dbc4f"
+#}
+
+###
+POST http://localhost:8080/api/v1/videos
+Content-Type: application/json
+
+{
+  "fileName": "dummy.mp4",
+  "sha256Hex": "{{$random.crypto.sha256}}"
+}
+
+
+> {%
+    client.global.set("signedUrl", response.body.signedUrl);
+    client.global.set("uploadId", response.body.uploadId);
+%}
+
+###
+GET http://localhost:8080/api/v1/videos
+
+###
+GET http://localhost:8080/api/v1/videos/{{uploadId}}/signed-url
+
+###
+PUT {{signedUrl}}
+Content-Type: video/mp4
+
+< ./demo.mp4

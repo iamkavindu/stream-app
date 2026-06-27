@@ -1,0 +1,16 @@
+node_modules/
+dist/
+*.tsbuildinfo
+
+coverage/
+__screenshots__/
+
+.env*
+!.env.example
+
+*.log
+
+*.timestamp-*-*.mjs
+
+.vscode/*
+!.vscode/extensions.json

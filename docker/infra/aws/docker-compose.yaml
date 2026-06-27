@@ -1,0 +1,56 @@
+services:
+  floci:
+    image: floci/floci:latest
+    ports:
+      - "4566:4566"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./data:/app/data
+    environment:
+      FLOCI_HOSTNAME: floci
+      FLOCI_SERVICES_DOCKER_NETWORK: floci_default
+      FLOCI_STORAGE_MODE: hybrid
+      FLOCI_STORAGE_PERSISTENT_PATH: /app/data
+    networks:
+      - floci_default
+
+  floci-ui:
+    image: floci/floci-ui:latest
+    ports:
+      - "4500:4500"
+    environment:
+      FLOCI_ENDPOINT: http://floci:4566
+      AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+    depends_on:
+      - floci
+    networks:
+      - floci_default
+
+  aws-init:
+    image: amazon/aws-cli:2.27.29
+    entrypoint: ["/bin/sh", "/init-aws-resources.sh"]
+    volumes:
+      - ./init-aws-resources.sh:/init-aws-resources.sh:ro
+    environment:
+      AWS_ENDPOINT_URL: http://localhost:4566
+      AWS_DEFAULT_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      UPLOAD_BUCKET: streamapp-uploads
+      UPLOAD_TOPIC_NAME: video-upload-events
+      BACKEND_QUEUE_NAME: video-processing-backend
+      LAMBDA_QUEUE_NAME: video-processing-lambda
+      TRANSCODE_COMPLETE_QUEUE_NAME: video-transcode-complete-backend
+      AWS_ACCOUNT_ID: "000000000000"
+      BUCKET_WAIT_SECONDS: "120"
+    depends_on:
+      - floci
+    networks:
+      - floci_default
+    restart: "no"
+
+networks:
+  floci_default:
+    name: floci_default

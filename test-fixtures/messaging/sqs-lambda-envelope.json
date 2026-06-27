@@ -1,0 +1,6 @@
+{
+  "Records": [{
+    "messageId": "test-sqs-1",
+    "body": {{snsEnvelopeJson}}
+  }]
+}

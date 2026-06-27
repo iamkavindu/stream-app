@@ -1,0 +1,52 @@
+---
+description: Mandatory project documentation — read at session start, update on every meaningful change
+alwaysApply: true
+---
+
+# stream-app documentation (required)
+
+## Session start
+
+Before planning or implementing work in this repo, **read**:
+
+1. `docs/PROJECT.md` — architecture, stack, APIs, setup, current status
+2. `docs/CHANGELOG.md` — recent changes (newest first)
+
+Treat `docs/PROJECT.md` as the canonical base context for this project.
+
+## After every meaningful change
+
+Update documentation in the **same session** as the code change. Do not defer.
+
+### `docs/PROJECT.md`
+
+Update when any of these change:
+
+- Architecture or data model
+- API endpoints, request/response shapes, or behavior
+- Tech stack, dependencies, or tooling
+- Local dev / deployment setup
+- Implementation status (done vs not done)
+
+Keep it accurate and concise; remove stale information.
+
+### `docs/CHANGELOG.md`
+
+Append a new dated entry at the **top** (below the header) for every meaningful change:
+
+```markdown
+## YYYY-MM-DD — Short title
+
+**Summary:** One sentence — what and why.
+
+**Changed**
+- Bullet list of changes and files touched
+```
+
+Include bug fixes, features, refactors, config changes, and documentation-only updates that affect project understanding.
+
+## Scope
+
+- Applies to all work in this repository unless the user explicitly says otherwise.
+- Trivial typos with no behavioral or structural impact do not need a changelog entry.
+- Do not create alternate project-context files; keep `docs/PROJECT.md` as the single source of truth.
