@@ -374,12 +374,12 @@ Returns `404 Not Found` when `uploadId` is not in the database. Returns `409 Con
 - Root `README.md` with overview, diagrams, and local dev quick start
 - `POST /api/v1/videos` Bean Validation (`400 validation-failed` ProblemDetail)
 - Scheduled cleanup of stale `AWAITING_UPLOAD` rows (`StaleUploadCleanupJob`)
+- `LICENSE` — MIT (Copyright (c) 2026 Kavindu Perera)
 
 ### Not done
 
 - End-to-end transcode verification on local Floci Lambda (requires WSL native build + FFmpeg layer deploy)
 - Authentication / authorization
-- `LICENSE` file (README notes intended MIT license)
 
 ## Local development
 

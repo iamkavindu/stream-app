@@ -104,4 +104,4 @@ See [`docs/PROJECT.md`](docs/PROJECT.md) for transcode Lambda deploy (WSL native
 
 ## License
 
-No `LICENSE` file is present in this repository yet. Intended license: **MIT** (to be added).
+[MIT License](LICENSE) — Copyright (c) 2026 Kavindu Perera.

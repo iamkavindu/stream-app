@@ -6,6 +6,27 @@ Format: newest entries first. Each entry lists what changed and why.
 
 ---
 
+## 2026-06-28 — README license section
+
+**Summary:** Updated README to reflect the added MIT `LICENSE` file instead of the previous placeholder note.
+
+**Changed**
+
+- `README.md` — License section links to `LICENSE` with copyright holder
+- `docs/PROJECT.md` — moved `LICENSE` from not-done to done
+
+---
+
+## 2026-06-28 — Blog draft: video upload and HLS streaming pipeline
+
+**Summary:** Added an iamkavindu.dev-format technical blog post covering stream-app architecture, presigned uploads, SNS/SQS transcode fan-out, fMP4 HLS, and playback trade-offs.
+
+**Changed**
+
+- `docs/building-a-video-upload-and-hls-streaming-pipeline.md` — full blog draft (frontmatter + GFM body, Mermaid diagrams)
+
+---
+
 ## 2026-06-28 — README refresh
 
 **Summary:** Updated root README with current features (retry, polling, validation), test stack, Windows AWS init, and test commands.
