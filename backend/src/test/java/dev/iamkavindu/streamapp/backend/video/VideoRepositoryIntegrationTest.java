@@ -57,6 +57,49 @@ class VideoRepositoryIntegrationTest {
     }
 
     @Test
+    void completeTranscode_settlesEitherActiveStateAndPreservesTerminalRows() {
+        for (var initial : new VideoStatus[] {VideoStatus.AWAITING_UPLOAD, VideoStatus.TRANSCODING_IN_PROGRESS}) {
+            for (var terminal : new VideoStatus[] {VideoStatus.PLAY_READY, VideoStatus.FAILED}) {
+                var uploadId = UUID.randomUUID();
+                videoRepository.createPendingUploadEntry(uploadId, "demo.mp4", TestData.uniqueShaBytes());
+                if (initial == VideoStatus.TRANSCODING_IN_PROGRESS) {
+                    videoRepository.updateStatus(uploadId, VideoStatus.AWAITING_UPLOAD, initial);
+                }
+
+                assertThat(videoRepository.completeTranscode(uploadId, terminal)).isTrue();
+                var settled = videoRepository.findByUploadId(uploadId).orElseThrow();
+                assertThat(settled.status()).isEqualTo(terminal);
+
+                assertThat(videoRepository.completeTranscode(uploadId, terminal)).isFalse();
+                var conflicting = terminal == VideoStatus.PLAY_READY ? VideoStatus.FAILED : VideoStatus.PLAY_READY;
+                assertThat(videoRepository.completeTranscode(uploadId, conflicting)).isFalse();
+                assertThat(videoRepository.updateStatus(
+                        uploadId, VideoStatus.AWAITING_UPLOAD, VideoStatus.TRANSCODING_IN_PROGRESS)).isFalse();
+                assertThat(videoRepository.findByUploadId(uploadId).orElseThrow()).isEqualTo(settled);
+            }
+        }
+    }
+
+    @Test
+    void completeTranscode_unknownUploadDoesNotCreateRow() {
+        var uploadId = UUID.randomUUID();
+        assertThat(videoRepository.completeTranscode(uploadId, VideoStatus.PLAY_READY)).isFalse();
+        assertThat(videoRepository.findByUploadId(uploadId)).isEmpty();
+    }
+
+    @Test
+    void completeTranscode_rejectsNonTerminalStatus() {
+        var uploadId = UUID.randomUUID();
+        videoRepository.createPendingUploadEntry(uploadId, "demo.mp4", TestData.uniqueShaBytes());
+        for (var status : new VideoStatus[] {VideoStatus.AWAITING_UPLOAD, VideoStatus.TRANSCODING_IN_PROGRESS, null}) {
+            assertThatThrownBy(() -> videoRepository.completeTranscode(uploadId, status))
+                    .isInstanceOf(IllegalArgumentException.class);
+        }
+        assertThat(videoRepository.findByUploadId(uploadId).orElseThrow().status())
+                .isEqualTo(VideoStatus.AWAITING_UPLOAD);
+    }
+
+    @Test
     void createPendingUploadEntry_duplicateSha256() {
         var sha = TestData.uniqueShaBytes();
         videoRepository.createPendingUploadEntry(UUID.randomUUID(), "first.mp4", sha);

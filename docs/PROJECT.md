@@ -199,7 +199,7 @@ FFmpeg flags (VOD fMP4 HLS, 4 s segments, single combined media file):
 }
 ```
 
-Use `"status": "FAILED"` when transcoding errors. The backend transitions `TRANSCODING_IN_PROGRESS` → `PLAY_READY` or `FAILED`.
+Use `"status": "FAILED"` when transcoding errors. The backend atomically transitions either `AWAITING_UPLOAD` or `TRANSCODING_IN_PROGRESS` → `PLAY_READY` or `FAILED`, allowing completion to arrive before the separate upload notification.
 
 Example stream-bucket layout after transcode:
 
@@ -235,9 +235,13 @@ Buckets and CORS are created by the backend on startup (`ResourceInitialize`, `d
 | Queue | Handler | Transition |
 |-------|---------|------------|
 | `video-processing-backend` | `onUploadComplete` | `AWAITING_UPLOAD` → `TRANSCODING_IN_PROGRESS` |
-| `video-transcode-complete-backend` | `onTranscodeComplete` | `TRANSCODING_IN_PROGRESS` → `PLAY_READY` or `FAILED` |
+| `video-transcode-complete-backend` | `onTranscodeComplete` | `AWAITING_UPLOAD` or `TRANSCODING_IN_PROGRESS` → `PLAY_READY` or `FAILED` |
 
 Upload events arrive SNS-wrapped (S3 `ObjectCreated` fan-out from `video-upload-events`). Transcode-complete messages are plain JSON (`VideoStatusUpdateRecord`).
+
+**Completion delivery semantics (SA-003):** The repository uses one conditional update across both active states; a later upload event cannot regress a terminal row. Identical terminal results are acknowledged as duplicates; conflicting terminal results retain the first committed terminal state and are logged. Unknown upload IDs and invalid JSON, missing fields, or non-terminal statuses are logged and acknowledged without mutation. Database failures propagate so `ON_SUCCESS` does not acknowledge failed handling. Duplicate/conflicting results do not change `updated_at`.
+
+This contract applies to the current single-attempt model. `FAILED` also covers stale-upload cleanup, so a completion cannot revive a row already failed by cleanup. Processing retries and distinguishing delayed old-attempt results require SA-008's attempt identity before they are introduced.
 
 ## Domain model
 
@@ -385,7 +389,8 @@ Returns `404 Not Found` when `uploadId` is not in the database. Returns `409 Con
 
 ### Review baseline (2026-10-05)
 
-- The source review and planned fixes are tracked in `BACKLOG.md`; local verification and merged status are recorded separately.
+- PR #1 (backlog), PR #2 (SA-001), and PR #3 (SA-002) are merged. The user confirmed local Docker initialization for SA-001 and passing frontend tests/build for SA-002.
+- SA-003 completion ordering is implemented on its review branch; backend compilation and regression execution require Java 25 and Docker and remain pending.
 - SA-002 fixes the `StreamPanel.test.ts` assertion typing using `find(...).exists()`: all 78 Vitest tests and `npm run build` (type checking plus bundling) pass. Vite still reports a non-blocking large stream-player chunk warning.
 - Review environment: Node 24, Java 17, no Docker. Java 25 integration tests, native Lambda execution, and browser playback have not been verified in that environment.
 
@@ -531,7 +536,7 @@ Uses `testcontainers-jooq-codegen-maven-plugin` (not `DDLDatabase`). The old `DD
 | `backend/src/main/resources/db/migration/` | Flyway migrations |
 | `backend/src/main/java/.../video/VideoController.java` | `GET` / `POST` `/api/v1/videos`, `GET` signed stream URL |
 | `backend/src/main/java/.../video/VideoService.java` | Upload orchestration + dual `@SqsListener` handlers |
-| `backend/src/main/java/.../video/VideoRepository.java` | jOOQ insert + conditional `updateStatus` |
+| `backend/src/main/java/.../video/VideoRepository.java` | jOOQ insert, conditional `updateStatus`, and atomic `completeTranscode` |
 | `backend/src/main/java/.../aws/AwsMessagingResources.java` | SNS topic and SQS queue names |
 | `backend/src/main/java/.../aws/S3UploadEventParser.java` | Parse SNS-wrapped S3 upload events |
 | `backend/src/main/java/.../video/model/VideoStatusUpdateRecord.java` | Lambda transcode-complete message DTO |

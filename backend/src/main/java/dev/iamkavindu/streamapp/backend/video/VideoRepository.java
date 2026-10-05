@@ -63,6 +63,25 @@ public class VideoRepository {
     }
 
     /**
+     * Settles the current single processing attempt even if its upload notification is delayed.
+     * Terminal rows are excluded atomically, so duplicate/conflicting results cannot overwrite them.
+     * @return {@code true} when an active row was settled
+     */
+    public boolean completeTranscode(UUID uploadId, VideoStatus terminalStatus) {
+        if (terminalStatus != VideoStatus.PLAY_READY && terminalStatus != VideoStatus.FAILED) {
+            throw new IllegalArgumentException("Transcode result must be PLAY_READY or FAILED");
+        }
+        var now = OffsetDateTime.now(ZoneId.systemDefault());
+        return dsl.update(VIDEOS)
+                .set(VIDEOS.STATUS, terminalStatus.name())
+                .set(VIDEOS.UPDATED_AT, now)
+                .where(VIDEOS.UPLOAD_ID.eq(uploadId))
+                .and(VIDEOS.STATUS.in(
+                        VideoStatus.AWAITING_UPLOAD.name(), VideoStatus.TRANSCODING_IN_PROGRESS.name()))
+                .execute() > 0;
+    }
+
+    /**
      * @return number of rows transitioned to {@code FAILED}
      */
     public int markStaleAwaitingUploadsFailed(Duration ttl) {

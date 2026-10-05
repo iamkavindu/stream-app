@@ -91,9 +91,10 @@ Use one branch and one PR per bounded change. An item can have several PRs when 
 
 ## Delivery status
 
-No implementation is marked merged or released. GitHub PR creation depends on authenticated repository access.
+GitHub access is connected. Backlog PR #1 and implementation PRs #2 (SA-001) and #3 (SA-002) are merged; local verification was confirmed by the user. Changes are reviewed and merged manually.
 
 | Task | Branch | Status | Validation |
 |---|---|---|---|
-| SA-001 | `fix/sa-001-compose-endpoint` | Implemented; awaiting local Docker verification | Parsed Compose YAML, confirmed shared network/service endpoint, and checked shell syntax. Docker is unavailable here; run initialization with buckets present and verify SNS/SQS/S3 notification wiring locally. |
-| SA-002 | `fix/sa-002-frontend-build` | Implemented and verified; awaiting review/merge | All 78 Vitest tests across 18 files pass; `npm run build` passes type checking and bundling. Non-blocking stream-player chunk-size warning remains. |
+| SA-001 | `fix/sa-001-compose-endpoint` | Merged in PR #2; locally verified | Static checks passed; the user confirmed successful local Docker initialization before merging. |
+| SA-002 | `fix/sa-002-frontend-build` | Merged in PR #3; locally verified | All 78 Vitest tests and production build passed here; the user also confirmed passing local tests/build before merging. |
+| SA-003 | `fix/sa-003-completion-ordering` | Implemented; backend verification pending | Regression cases added for repository, direct listeners, service validation, and early completion through SQS. Requires Java 25 and Docker; tests have not run here. |

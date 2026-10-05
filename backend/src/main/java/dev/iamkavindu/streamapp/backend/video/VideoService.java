@@ -250,44 +250,32 @@ public class VideoService {
 
 
 
-        if (update.status() != VideoStatus.PLAY_READY && update.status() != VideoStatus.FAILED) {
-
-            log.warn(
-
-                    "Ignoring transcode-complete message for {} with unexpected status {}",
-
-                    update.uploadId(),
-
-                    update.status());
-
+        if (update == null || update.uploadId() == null || update.status() == null) {
+            log.warn("Ignoring transcode-complete message with missing uploadId or status");
             return;
-
         }
 
+        if (update.status() != VideoStatus.PLAY_READY && update.status() != VideoStatus.FAILED) {
+            log.warn("Ignoring transcode-complete message for {} with unexpected status {}",
+                    update.uploadId(), update.status());
+            return;
+        }
 
-
-        var updated = videoRepository.updateStatus(
-
-                update.uploadId(), VideoStatus.TRANSCODING_IN_PROGRESS, update.status());
-
-
-
+        var updated = videoRepository.completeTranscode(update.uploadId(), update.status());
         if (updated) {
-
             log.info("Transcode complete for {} — status set to {}", update.uploadId(), update.status());
-
-        } else {
-
-            log.warn(
-
-                    "Transcode complete for {} — no row updated (expected TRANSCODING_IN_PROGRESS)",
-
-                    update.uploadId());
-
+            return;
         }
 
+        var current = videoRepository.findByUploadId(update.uploadId());
+        if (current.isEmpty()) {
+            log.warn("Ignoring transcode-complete message for unknown upload {}", update.uploadId());
+        } else if (current.get().status() == update.status()) {
+            log.debug("Ignoring duplicate transcode-complete message for {} with status {}",
+                    update.uploadId(), update.status());
+        } else {
+            log.warn("Ignoring conflicting transcode-complete message for {}: existing {}, received {}",
+                    update.uploadId(), current.get().status(), update.status());
+        }
     }
-
 }
-
-
