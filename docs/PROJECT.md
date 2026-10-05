@@ -4,13 +4,15 @@
 
 ## Overview
 
-**stream-app** is a video upload and streaming platform (early stage). The goal is to let clients upload videos via presigned object-storage URLs while the backend tracks upload metadata, deduplicates by SHA-256, and (eventually) serves or streams content.
+**stream-app** is a locally hosted video upload and HLS streaming demo. Clients upload via presigned object-storage URLs; the backend tracks metadata and SHA-256 duplicates, and a separate Lambda transcodes media for playback through Floci-emulated AWS services.
+
+Prioritized implementation work, acceptance criteria, and dependencies are tracked in [BACKLOG.md](./BACKLOG.md). That backlog describes proposals; this document describes implemented behavior.
 
 | Item | Value |
 |------|-------|
 | Package | `dev.iamkavindu.streamapp` |
 | Version | `0.0.1-SNAPSHOT` |
-| Repo state | Git initialized on `main`; no commits yet |
+| Development baseline | `main` at `9db5dfc` for the 2026-10-05 review |
 | Frontend | Vue 3 + Vite + Tailwind CSS v4 (upload + stream tabs) |
 
 ## Repository layout
@@ -97,7 +99,7 @@ Uploads run independently so new files can be added while others are in progress
 
 ## Architecture (current)
 
-The platform has three cooperating parts: **upload** (backend + frontend), **transcode** (Lambda / Spring Cloud Function, planned), and **playback** (backend + frontend + HLS.js).
+The platform has three cooperating parts: **upload** (backend + frontend), **transcode** (Lambda / Spring Cloud Function), and **playback** (backend + frontend + HLS.js).
 
 ### End-to-end flow
 
@@ -378,8 +380,14 @@ Returns `404 Not Found` when `uploadId` is not in the database. Returns `409 Con
 
 ### Not done
 
-- End-to-end transcode verification on local Floci Lambda (requires WSL native build + FFmpeg layer deploy)
+- Automated deployed-Lambda-to-browser acceptance verification (the user reports a working local demo; existing pipeline tests manually supply completion rather than executing the deployed native Lambda)
 - Authentication / authorization
+
+### Review baseline (2026-10-05)
+
+- The source review and planned fixes are tracked in `BACKLOG.md`; local verification and merged status are recorded separately.
+- Frontend baseline: 78 Vitest tests pass, but `npm run build` fails type checking on `StreamPanel.test.ts` (`get(...).exists()`).
+- Review environment: Node 24, Java 17, no Docker. Java 25 integration tests, native Lambda execution, and browser playback have not been verified in that environment.
 
 ## Local development
 
@@ -433,7 +441,7 @@ $env:AWS_ENDPOINT_URL = "http://localhost:4566"
 |----------|------|-------|
 | SNS topic | `video-upload-events` | Receives `s3:ObjectCreated:*` from upload bucket |
 | SQS queue | `video-processing-backend` | SNS fan-out; backend sets `TRANSCODING_IN_PROGRESS` |
-| SQS queue | `video-processing-lambda` | SNS fan-out; Lambda transcode trigger (planned) |
+| SQS queue | `video-processing-lambda` | SNS fan-out; Lambda transcode trigger wired by deployment script |
 | SQS queue | `video-transcode-complete-backend` | Lambda → backend `PLAY_READY` / `FAILED` |
 | Topic / queue policies | — | S3 → SNS; SNS → SQS; Lambda → transcode-complete queue |
 | S3 notification | `streamapp-uploads` → SNS | Event `s3:ObjectCreated:*` |

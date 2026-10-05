@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-10-05 — Prioritized local-demo implementation backlog
+
+**Summary:** Scoped the remaining reliability, lifecycle, presentation, and release work against the reviewed code, preserving the existing architecture and coding conventions.
+
+**Changed**
+
+- `docs/BACKLOG.md` — 35 prioritized tasks with acceptance criteria, dependencies, delivery rules, and deferred extensions
+- `docs/PROJECT.md` — link to planning backlog, correct stale scaffold/transcode descriptions, and distinguish user-reported local operation from automated acceptance evidence
+
+---
+
 All notable changes to **stream-app** are documented here, starting **2026-06-26**.
 
 Format: newest entries first. Each entry lists what changed and why.
