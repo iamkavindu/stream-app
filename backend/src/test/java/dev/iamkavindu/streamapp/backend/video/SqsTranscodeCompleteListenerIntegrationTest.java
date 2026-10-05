@@ -50,6 +50,26 @@ class SqsTranscodeCompleteListenerIntegrationTest {
                 .isEqualTo(VideoStatus.FAILED));
     }
 
+    @Test
+    void earlyPlayReadyMessage_settlesAwaitingUpload() {
+        assertEarlyCompletion(VideoStatus.PLAY_READY);
+    }
+
+    @Test
+    void earlyFailedMessage_settlesAwaitingUpload() {
+        assertEarlyCompletion(VideoStatus.FAILED);
+    }
+
+    private void assertEarlyCompletion(VideoStatus terminal) {
+        var uploadId = UUID.randomUUID();
+        videoRepository.createPendingUploadEntry(uploadId, "demo.mp4", TestData.uniqueShaBytes());
+        publishTranscodeComplete(uploadId, terminal.name());
+
+        await().atMost(15, TimeUnit.SECONDS).untilAsserted(() -> assertThat(
+                        videoRepository.findByUploadId(uploadId).orElseThrow().status())
+                .isEqualTo(terminal));
+    }
+
     private void publishTranscodeComplete(UUID uploadId, String status) {
         var queueUrl = sqsClient
                 .getQueueUrl(req -> req.queueName(AwsMessagingResources.TRANSCODE_COMPLETE_QUEUE))

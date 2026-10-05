@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-10-05 — SA-003: settle completion independently of upload event order
+
+**Summary:** Accept terminal processing results atomically from either active state so early completion is retained and late/duplicate events cannot regress terminal status.
+
+**Changed**
+
+- `backend/.../video/VideoRepository.java` — add conditional `completeTranscode` across awaiting-upload and processing states
+- `backend/.../video/VideoService.java` — validate completion fields; distinguish unknown, duplicate, and conflicting results; propagate database failures for redelivery
+- Backend repository, direct listener, service unit, and SQS listener tests — cover both delivery orders, terminal preservation, invalid/unknown messages, and database failure
+- `docs/PROJECT.md`, `docs/BACKLOG.md` — document single-attempt semantics and pending verification; record user-confirmed local checks and merged PRs #1–#3
+
+**Validation:** `git diff --check` passes. The focused Maven test command stopped at parent-POM resolution because Maven Central DNS is unavailable. Backend compilation/tests remain pending: this environment also has Java 17 and no Docker; the project requires Java 25 and Docker-backed jOOQ generation/Testcontainers. No backend test success is claimed.
+
+---
+
 ## 2026-10-05 — SA-002: restore frontend type-checked build
 
 **Summary:** Use the Vue Test Utils existence-query API for the player placeholder assertion so the test suite also passes production type checking.

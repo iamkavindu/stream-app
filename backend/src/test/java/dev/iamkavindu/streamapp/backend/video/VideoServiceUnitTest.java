@@ -15,6 +15,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.dao.DuplicateKeyException;
 import tools.jackson.databind.ObjectMapper;
 
@@ -30,7 +31,9 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -140,13 +143,12 @@ class VideoServiceUnitTest {
         var message = """
                 {"uploadId":"%s","status":"PLAY_READY"}
                 """.formatted(uploadId);
-        when(videoRepository.updateStatus(uploadId, VideoStatus.TRANSCODING_IN_PROGRESS, VideoStatus.PLAY_READY))
+        when(videoRepository.completeTranscode(uploadId, VideoStatus.PLAY_READY))
                 .thenReturn(true);
 
         videoService.onTranscodeComplete(message);
 
-        verify(videoRepository).updateStatus(
-                uploadId, VideoStatus.TRANSCODING_IN_PROGRESS, VideoStatus.PLAY_READY);
+        verify(videoRepository).completeTranscode(uploadId, VideoStatus.PLAY_READY);
     }
 
     @Test
@@ -158,7 +160,47 @@ class VideoServiceUnitTest {
 
         videoService.onTranscodeComplete(message);
 
+        verify(videoRepository, never()).completeTranscode(any(), any());
+    }
+
+    @Test
+    void onTranscodeComplete_ignoresInvalidMessagesWithoutDatabaseAccess() {
+        var uploadId = UUID.randomUUID();
+        for (var message : new String[] {
+                "not-json", "null", "{}", "{\"status\":\"PLAY_READY\"}",
+                "{\"uploadId\":\"" + uploadId + "\"}",
+                "{\"uploadId\":\"invalid\",\"status\":\"PLAY_READY\"}",
+                "{\"uploadId\":\"" + uploadId + "\",\"status\":\"UNKNOWN\"}"}) {
+            videoService.onTranscodeComplete(message);
+        }
+        verifyNoInteractions(videoRepository);
+    }
+
+    @Test
+    void onTranscodeComplete_unknownDuplicateAndConflictingResultsAreIgnored() {
+        var uploadId = UUID.randomUUID();
+        var message = "{\"uploadId\":\"" + uploadId + "\",\"status\":\"PLAY_READY\"}";
+        when(videoRepository.findByUploadId(uploadId)).thenReturn(
+                Optional.empty(), Optional.of(videoRecord(uploadId, VideoStatus.PLAY_READY)),
+                Optional.of(videoRecord(uploadId, VideoStatus.FAILED)));
+
+        videoService.onTranscodeComplete(message);
+        videoService.onTranscodeComplete(message);
+        videoService.onTranscodeComplete(message);
+
+        verify(videoRepository, times(3)).completeTranscode(uploadId, VideoStatus.PLAY_READY);
         verify(videoRepository, never()).updateStatus(any(), any(), any());
+    }
+
+    @Test
+    void onTranscodeComplete_databaseFailurePropagatesForRedelivery() {
+        var uploadId = UUID.randomUUID();
+        var message = "{\"uploadId\":\"" + uploadId + "\",\"status\":\"FAILED\"}";
+        when(videoRepository.completeTranscode(uploadId, VideoStatus.FAILED))
+                .thenThrow(new DataAccessResourceFailureException("database unavailable"));
+
+        assertThatThrownBy(() -> videoService.onTranscodeComplete(message))
+                .isInstanceOf(DataAccessResourceFailureException.class);
     }
 
     private static VideoRecord videoRecord(UUID uploadId, VideoStatus status) {
