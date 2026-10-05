@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-10-05 — SA-002: restore frontend type-checked build
+
+**Summary:** Use the Vue Test Utils existence-query API for the player placeholder assertion so the test suite also passes production type checking.
+
+**Changed**
+
+- `frontend/src/features/stream/ui/StreamPanel.test.ts` — replace `get(...).exists()` with `find(...).exists()`; retain the same existence assertion and application behavior
+- `docs/PROJECT.md`, `docs/BACKLOG.md` — record build recovery and validation status
+
+**Validation:** `npm run test:run` passes 78 tests across 18 files; `npm run build` passes type checking and bundling. The existing large player-chunk warning is non-blocking.
+
+---
+
 ## 2026-10-05 — SA-001: fix Compose bootstrap endpoint
 
 **Summary:** Point the AWS initialization container at the Floci service so it does not try to reach an AWS endpoint inside its own container.
