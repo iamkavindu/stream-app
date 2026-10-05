@@ -96,3 +96,4 @@ No implementation is marked merged or released. GitHub PR creation depends on au
 | Task | Branch | Status | Validation |
 |---|---|---|---|
 | SA-001 | `fix/sa-001-compose-endpoint` | Implemented; awaiting local Docker verification | Parsed Compose YAML, confirmed shared network/service endpoint, and checked shell syntax. Docker is unavailable here; run initialization with buckets present and verify SNS/SQS/S3 notification wiring locally. |
+| SA-002 | `fix/sa-002-frontend-build` | Implemented and verified; awaiting review/merge | All 78 Vitest tests across 18 files pass; `npm run build` passes type checking and bundling. Non-blocking stream-player chunk-size warning remains. |

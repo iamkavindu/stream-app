@@ -83,7 +83,7 @@ describe('StreamPanel', () => {
       global: { stubs: { VideoPlaylistItem: true, HlsPlayer: true } },
     })
 
-    expect(wrapper.get('[data-testid="player-placeholder"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="player-placeholder"]').exists()).toBe(true)
   })
 
   it('shows player error for non-playable selection', () => {

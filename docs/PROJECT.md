@@ -386,7 +386,7 @@ Returns `404 Not Found` when `uploadId` is not in the database. Returns `409 Con
 ### Review baseline (2026-10-05)
 
 - The source review and planned fixes are tracked in `BACKLOG.md`; local verification and merged status are recorded separately.
-- Frontend baseline: 78 Vitest tests pass, but `npm run build` fails type checking on `StreamPanel.test.ts` (`get(...).exists()`).
+- SA-002 fixes the `StreamPanel.test.ts` assertion typing using `find(...).exists()`: all 78 Vitest tests and `npm run build` (type checking plus bundling) pass. Vite still reports a non-blocking large stream-player chunk warning.
 - Review environment: Node 24, Java 17, no Docker. Java 25 integration tests, native Lambda execution, and browser playback have not been verified in that environment.
 
 ## Local development
