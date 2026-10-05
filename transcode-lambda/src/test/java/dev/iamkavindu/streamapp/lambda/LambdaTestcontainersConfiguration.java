@@ -4,6 +4,7 @@ import io.floci.testcontainers.FlociContainer;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.test.context.DynamicPropertyRegistrar;
+import org.testcontainers.utility.DockerImageName;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
@@ -16,7 +17,10 @@ public class LambdaTestcontainersConfiguration {
 
     @Bean(destroyMethod = "stop")
     FlociContainer flociContainer() {
-        return new FlociContainer();
+        // Version 2.0.0 of the Java module still defaults to the legacy image.
+        // Keep this release aligned with docker/infra/aws/docker-compose.yaml.
+        return new FlociContainer(DockerImageName.parse("floci/floci:2.1.0")
+                .asCompatibleSubstituteFor("hectorvent/floci"));
     }
 
     @Bean

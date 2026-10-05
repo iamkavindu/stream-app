@@ -12,6 +12,7 @@ import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -42,10 +43,11 @@ class S3ServiceUnitTest {
     @Test
     void accessDeniedAndServerFailuresAreNotMissingObjects() {
         for (var status : new int[] {403, 503}) {
-            when(client.headObject(org.mockito.ArgumentMatchers.<Consumer<HeadObjectRequest.Builder>>any()))
-                    .thenThrow(S3Exception.builder().statusCode(status).build());
+            var failure = S3Exception.builder().statusCode(status).build();
+            doThrow(failure).when(client)
+                    .headObject(org.mockito.ArgumentMatchers.<Consumer<HeadObjectRequest.Builder>>any());
             assertThatThrownBy(() -> service.uploadSourceExists(UUID.randomUUID(), "demo.mp4"))
-                    .isInstanceOf(S3Exception.class);
+                    .isSameAs(failure);
         }
         verify(client, never()).headBucket(org.mockito.ArgumentMatchers.<Consumer<HeadBucketRequest.Builder>>any());
     }

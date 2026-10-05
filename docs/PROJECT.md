@@ -413,7 +413,7 @@ Returns `404 Not Found` when `uploadId` is not in the database. Returns `409 Con
 
 - PRs #1–#5 are merged. The user confirmed local Docker initialization for SA-001, frontend tests/build for SA-002, and the default backend Maven suite on Linux for SA-003 after correcting the Mockito import.
 - SA-004 is merged in PR #5; the user confirmed passing local Lambda-module tests. Native/deployed publication-outage recovery remains unverified.
-- SA-005 slice 1 retains known registration, renews pending transfers, and reconciles received sources. All 84 frontend tests and the production build pass; backend/Floci conditional-write acceptance requires local execution. The remaining SA-005 acceptance criteria are still pending.
+- SA-005 slice 1 retains known registration, renews pending transfers, and reconciles received sources. All 84 frontend tests and the production build pass; the initial user backend run passed 74 of 76 tests, exposing a Mockito re-stubbing error and ignored conditional writes on `hectorvent/floci:latest`. The test fix and explicit `floci/floci:2.1.0` pin require a new local backend run. The remaining SA-005 acceptance criteria are still pending.
 - SA-002 fixes the `StreamPanel.test.ts` assertion typing using `find(...).exists()`: all 78 Vitest tests and `npm run build` (type checking plus bundling) pass. Vite still reports a non-blocking large stream-player chunk warning.
 - Review environment: Node 24, Java 17, no Docker. Java 25 integration tests, native Lambda execution, and browser playback have not been verified in that environment.
 
@@ -444,6 +444,8 @@ docker compose -f docker/infra/aws/docker-compose.yaml up -d
 | Floci (S3 API) | `4566` | S3-compatible endpoint for uploads |
 | Floci UI | `4500` | Web UI for browsing buckets/objects |
 | `aws-init` | — | One-shot init: SNS topic, SQS queues, S3→SNS notification |
+
+Compose, backend Testcontainers, and Lambda Testcontainers explicitly use `floci/floci:2.1.0`. The Java module remains at 2.0.0; its default is the legacy `hectorvent/floci:latest`, so both test configurations declare the replacement image as compatible. See the [release](https://github.com/floci-io/floci/releases/tag/2.1.0). This pin avoids silently testing a different/cached `latest` image; conditional-write and deployed/native behavior still require local verification after the change.
 
 Floci uses hybrid persistent storage under `docker/infra/aws/data/`.
 

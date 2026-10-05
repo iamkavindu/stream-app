@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-10-06 — PR #6 backend test corrections and aligned Floci image
+
+**Summary:** Fix Mockito re-stubbing and align the emulator release used by tests and Compose while preserving the conditional-overwrite acceptance gate.
+
+**Changed**
+
+- `S3ServiceUnitTest` — use `doThrow` when replacing an existing throwing stub; assert the same 403/503 exception propagates without a bucket check
+- Backend and Lambda Testcontainers configurations — explicitly select `floci/floci:2.1.0` with the compatibility declaration required by Java module 2.0.0
+- `docker/infra/aws/docker-compose.yaml` — use the same release instead of floating `latest`
+- `docs/PROJECT.md` — record the image choice and actual test results
+
+**Validation:** User confirmed frontend tests pass. Initial backend run compiled and ran 76 tests: 74 passed, one conditional-write assertion failed (412 expected, 200 received on `hectorvent/floci:latest`), and one unit test errored during re-stubbing. The overwrite assertion and original-byte check remain unchanged. Diff and Java syntax checks pass for the correction; backend/Lambda runtime tests and Compose/native acceptance are pending because this workspace lacks Java 25/Docker and cached Maven dependencies.
+
+---
+
 ## 2026-10-05 — SA-005 slice 1: retry a known upload without duplicate registration
 
 **Summary:** Preserve registration before PUT and reconcile/renew that upload on retry instead of registering the same hash again.
