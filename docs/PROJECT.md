@@ -199,7 +199,11 @@ FFmpeg flags (VOD fMP4 HLS, 4 s segments, single combined media file):
 }
 ```
 
-Use `"status": "FAILED"` when transcoding errors. The backend atomically transitions either `AWAITING_UPLOAD` or `TRANSCODING_IN_PROGRESS` → `PLAY_READY` or `FAILED`, allowing completion to arrive before the separate upload notification.
+Use `"status": "FAILED"` for a nonzero FFmpeg exit only after that result has been accepted by SQS. The backend atomically transitions either `AWAITING_UPLOAD` or `TRANSCODING_IN_PROGRESS` → `PLAY_READY` or `FAILED`, allowing completion to arrive before the separate upload notification.
+
+**Result publication and redelivery (SA-004):** Queue lookup, serialization, and send failures propagate out of the function. A failed `PLAY_READY` send is never converted to `FAILED`. A nonzero FFmpeg exit publishes `FAILED`; failure to publish it also fails the invocation. Source download, output upload, temporary-file/output-artifact problems, and inability to start FFmpeg fail the invocation without publishing a terminal result. Interrupted workers restore the interrupt flag. The existing best-effort temporary-directory cleanup runs in `finally` on every path, including publication failure; stricter cleanup/process bounds remain SA-011.
+
+The current nonzero FFmpeg exit policy is retained; exit code alone does not identify every failure cause. More detailed media validation/failure classification remains SA-010. Redelivery can redo the transcode and overwrite output; attempt identity/idempotency remain SA-008/SA-009. The consumer throws for the whole batch, so earlier successful records may also be redelivered. Configure bounded retries, visibility timeout, and DLQs via SA-006 before presenting fault-recovery scenarios. Deployed/native Lambda redelivery still needs local acceptance verification.
 
 Example stream-bucket layout after transcode:
 
@@ -371,7 +375,7 @@ Returns `404 Not Found` when `uploadId` is not in the database. Returns `409 Con
 - RFC 7807 error handling (`BackendExceptionHandler`, `ProblemTypes`, `DuplicateVideoUploadException`)
 - Manual API test file (`stream_app-endpoints.http`) and sample `demo.mp4`
 - Backend tests: unit + integration via Testcontainers (PostgreSQL 18 + Floci): repository, S3 presign, REST API, direct and async SQS listeners (`@MessagingIntegrationTest`), upload flow, stale cleanup, RFC 7807 handler tests, shared contract fixtures (`test-fixtures/`); default `./mvnw test` excludes `@Tag("slow")` and `@Tag("pipeline")`
-- transcode-lambda tests: unit parsers/command builder + Floci integration (`TranscoderFailureIntegrationTest`); `@Tag("slow")` real FFmpeg transcode when FFmpeg is on PATH
+- transcode-lambda tests: parser/command builder and deterministic `TranscoderUnitTest` fault injection; Floci invalid-media integration requires the configured FFmpeg executable; `@Tag("slow")` real valid-media transcode when FFmpeg is available
 - Vue 3 frontend with tabbed navigation (Upload | Stream)
 - Upload tab: persistent MP4 drop zone, multi-file queue, step chips, unified progress bar, per-file SHA-256 / signed-url / S3 PUT, RFC 7807 error alerts, and retry on failed uploads
 - Stream tab: video library from `GET /api/v1/videos`, auto-polling while videos transcode, signed manifest fetch, HLS.js player with distinct API vs playback error messages, failed-state playlist UX (`features/stream/`)
@@ -389,8 +393,8 @@ Returns `404 Not Found` when `uploadId` is not in the database. Returns `409 Con
 
 ### Review baseline (2026-10-05)
 
-- PR #1 (backlog), PR #2 (SA-001), and PR #3 (SA-002) are merged. The user confirmed local Docker initialization for SA-001 and passing frontend tests/build for SA-002.
-- SA-003 completion ordering is implemented on its review branch; backend compilation and regression execution require Java 25 and Docker and remain pending.
+- PRs #1–#4 are merged. The user confirmed local Docker initialization for SA-001, frontend tests/build for SA-002, and the default backend Maven suite on Linux for SA-003 after correcting the Mockito import.
+- SA-004 result publication is implemented on its review branch. Java syntax parsing and diff checks pass; Maven compilation/tests remain pending because this environment cannot resolve dependencies and lacks Java 25/Docker.
 - SA-002 fixes the `StreamPanel.test.ts` assertion typing using `find(...).exists()`: all 78 Vitest tests and `npm run build` (type checking plus bundling) pass. Vite still reports a non-blocking large stream-player chunk warning.
 - Review environment: Node 24, Java 17, no Docker. Java 25 integration tests, native Lambda execution, and browser playback have not been verified in that environment.
 
@@ -513,7 +517,7 @@ JVM compile/tests (no native image): `./mvnw test` from `transcode-lambda/`.
 - `V1__create_videos.sql` does not create the `streamapp` schema; Flyway `default-schema=streamapp` and jOOQ codegen `createSchemas=true` handle schema creation — align these if startup fails.
 - jOOQ code generation spins up a temporary PostgreSQL container (Testcontainers). Docker must be running for `mvn compile` / `mvn package`. Skip with `-Djooq.codegen.skip=true` only if generated sources already exist.
 - **Backend tests** (`cd backend && ./mvnw test`): PostgreSQL 18 + Floci via Testcontainers. Default excludes `@Tag("slow")` and `@Tag("pipeline")`. Run all: `./mvnw test -DexcludedGroups=`. Slow only: `-Dgroups=slow`. Pipeline: `-Dgroups=pipeline`.
-- **transcode-lambda tests** (`cd transcode-lambda && ./mvnw test`): Floci Testcontainers; failure-path transcode test runs without FFmpeg; real transcode tests need FFmpeg on PATH (`@Tag("slow")`, excluded by default).
+- **transcode-lambda tests** (`cd transcode-lambda && ./mvnw test`): Floci Testcontainers; deterministic fault-injection tests run without FFmpeg; invalid-media integration requires configured FFmpeg and otherwise skips; real valid-media transcode tests need FFmpeg on PATH (`@Tag("slow")`, excluded by default).
 - Recommended dev startup order: DB → Floci (`docker compose up`) → backend (creates S3 buckets) → re-run `aws-init` if the upload-bucket notification was skipped.
 
 ### jOOQ code generation

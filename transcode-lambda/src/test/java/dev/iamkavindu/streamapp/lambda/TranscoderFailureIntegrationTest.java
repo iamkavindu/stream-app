@@ -1,6 +1,7 @@
 package dev.iamkavindu.streamapp.lambda;
 
 import dev.iamkavindu.streamapp.lambda.aws.S3ObjectKeys;
+import dev.iamkavindu.streamapp.lambda.support.FfmpegConditions;
 import dev.iamkavindu.streamapp.lambda.support.LambdaIntegrationTest;
 import dev.iamkavindu.streamapp.lambda.support.LambdaTestAwsBootstrap;
 import dev.iamkavindu.streamapp.lambda.support.MessagingFixtures;
@@ -13,12 +14,14 @@ import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.sqs.SqsClient;
 
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 @LambdaIntegrationTest
 class TranscoderFailureIntegrationTest {
@@ -35,8 +38,12 @@ class TranscoderFailureIntegrationTest {
     @Value("${app.sqs.queue.transcode-complete-queue}")
     String transcodeCompleteQueue;
 
+    @Value("${app.ffmpeg.path}")
+    String ffmpegPath;
+
     @Test
     void invalidUploadBytes_publishesFailedStatus() {
+        assumeTrue(FfmpegConditions.probe(Path.of(ffmpegPath)), "Configured FFmpeg is required for invalid-media verification");
         var uploadId = UUID.randomUUID();
         var objectKey = S3ObjectKeys.uploadObjectKey(uploadId, "bad.mp4");
         s3Client.putObject(

@@ -127,9 +127,15 @@ public class Transcoder {
 
             publishStatus(uploadId, VideoStatus.PLAY_READY);
             log.info("Transcode complete for {} → s3://{}/{}", uploadId, streamBucket, playlistKey);
-        } catch (Exception e) {
-            log.error("Transcode failed for upload {}", uploadId, e);
+        } catch (FfmpegExitException e) {
+            log.error("FFmpeg rejected upload {}", uploadId, e);
             publishStatus(uploadId, VideoStatus.FAILED);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Transcode interrupted for upload " + uploadId, e);
+        } catch (Exception e) {
+            log.error("Retryable processing error for upload {}", uploadId, e);
+            throw new IllegalStateException("Processing must be retried for upload " + uploadId, e);
         } finally {
             if (workDir != null) {
                 deleteRecursively(workDir.toFile());
@@ -148,11 +154,14 @@ public class Transcoder {
             var queueUrl = transcodeCompleteQueueUrl;
             sqsClient.sendMessage(req -> req.queueUrl(queueUrl).messageBody(message));
         } catch (Exception e) {
+            transcodeCompleteQueueUrl = null;
             log.error("Failed to publish {} for upload {}", status, uploadId, e);
+            throw new IllegalStateException("Failed to publish " + status + " for upload " + uploadId, e);
         }
     }
 
-    private void executeNativeProcess(List<String> command) throws Exception {
+    // Package visibility allows deterministic worker-failure tests without an installed FFmpeg.
+    void executeNativeProcess(List<String> command) throws Exception {
         ProcessBuilder pb = new ProcessBuilder(command);
         pb.redirectErrorStream(true);
         Process process = pb.start();
@@ -166,7 +175,13 @@ public class Transcoder {
 
         int exitCode = process.waitFor();
         if (exitCode != 0) {
-            throw new RuntimeException("FFmpeg exited with status " + exitCode);
+            throw new FfmpegExitException(exitCode);
+        }
+    }
+
+    static final class FfmpegExitException extends RuntimeException {
+        FfmpegExitException(int exitCode) {
+            super("FFmpeg exited with status " + exitCode);
         }
     }
 

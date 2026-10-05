@@ -91,10 +91,11 @@ Use one branch and one PR per bounded change. An item can have several PRs when 
 
 ## Delivery status
 
-GitHub access is connected. Backlog PR #1 and implementation PRs #2 (SA-001) and #3 (SA-002) are merged; local verification was confirmed by the user. Changes are reviewed and merged manually.
+GitHub access is connected. PRs #1–#4 are merged; local verification was confirmed by the user. Changes are reviewed and merged manually.
 
 | Task | Branch | Status | Validation |
 |---|---|---|---|
 | SA-001 | `fix/sa-001-compose-endpoint` | Merged in PR #2; locally verified | Static checks passed; the user confirmed successful local Docker initialization before merging. |
 | SA-002 | `fix/sa-002-frontend-build` | Merged in PR #3; locally verified | All 78 Vitest tests and production build passed here; the user also confirmed passing local tests/build before merging. |
-| SA-003 | `fix/sa-003-completion-ordering` | Implemented; backend verification pending | Regression cases added for repository, direct listeners, service validation, and early completion through SQS. Requires Java 25 and Docker; tests have not run here. |
+| SA-003 | `fix/sa-003-completion-ordering` | Merged in PR #4; locally verified | User corrected the Mockito import and confirmed the default backend Maven suite passed on Linux. |
+| SA-004 | `fix/sa-004-result-publication` | Implemented; compilation/tests and deployed redelivery pending | Java syntax parsing and diff checks pass. Added deterministic publication/storage/worker-failure tests; full Lambda Maven suite requires local verification. Coordinate with SA-006/SA-009 for bounded retries/idempotency. |

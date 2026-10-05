@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-10-05 — SA-004: propagate lost processing-result publication
+
+**Summary:** Fail the Lambda invocation on publication and operational failures so redelivery can recover without reporting successful processing as a terminal failure.
+
+**Changed**
+
+- `transcode-lambda/.../Transcoder.java` — separate nonzero FFmpeg outcomes from retryable storage/start/publication failures; propagate result sends; clear cached queue URL on send failure; restore interrupts
+- `transcode-lambda/.../TranscoderUnitTest.java` — deterministic fault injection and redelivery checks for success/failure sends, queue lookup, S3 input/output, missing worker/artifacts, interrupts, and temporary-directory cleanup
+- `transcode-lambda/.../TranscoderFailureIntegrationTest.java` — require configured FFmpeg for actual invalid-media verification; missing executable now fails the invocation
+- `docs/PROJECT.md`, `docs/BACKLOG.md` — document redelivery semantics and pending gates; record PR #4 merge and user-confirmed passing Linux backend tests after the import correction
+
+**Validation:** Java compiler parsing of all three changed Java files and `git diff --check` pass. Parsing checks syntax only. Maven compilation/tests are pending: dependencies are unavailable in this environment, which also lacks Java 25/Docker. Native/deployed redelivery requires local acceptance verification. Nonzero FFmpeg exits retain the current terminal policy; finer classification remains SA-010.
+
+---
+
 ## 2026-10-05 — SA-003: settle completion independently of upload event order
 
 **Summary:** Accept terminal processing results atomically from either active state so early completion is retained and late/duplicate events cannot regress terminal status.
