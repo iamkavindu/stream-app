@@ -48,6 +48,22 @@ public class VideoRepository {
                 .fetchOptional(this::toVideoRecord);
     }
 
+    public Optional<VideoRecord> findByUploadIdForUpdate(UUID uploadId) {
+        return dsl.selectFrom(VIDEOS)
+                .where(VIDEOS.UPLOAD_ID.eq(uploadId))
+                .forUpdate()
+                .fetchOptional(this::toVideoRecord);
+    }
+
+    /** Refresh activity without changing the upload's identity, hash, or status. */
+    public void refreshAwaitingUpload(UUID uploadId) {
+        dsl.update(VIDEOS)
+                .set(VIDEOS.UPDATED_AT, OffsetDateTime.now(ZoneId.systemDefault()))
+                .where(VIDEOS.UPLOAD_ID.eq(uploadId))
+                .and(VIDEOS.STATUS.eq(VideoStatus.AWAITING_UPLOAD.name()))
+                .execute();
+    }
+
     /**
      * @return {@code true} when a row matched {@code uploadId} and {@code expectedStatus}
      */
@@ -91,7 +107,7 @@ public class VideoRepository {
                 .set(VIDEOS.STATUS, VideoStatus.FAILED.name())
                 .set(VIDEOS.UPDATED_AT, now)
                 .where(VIDEOS.STATUS.eq(VideoStatus.AWAITING_UPLOAD.name()))
-                .and(VIDEOS.CREATED_AT.lt(cutoff))
+                .and(VIDEOS.UPDATED_AT.lt(cutoff))
                 .execute();
     }
 

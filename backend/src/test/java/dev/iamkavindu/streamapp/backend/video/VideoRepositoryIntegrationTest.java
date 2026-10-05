@@ -4,11 +4,16 @@ import dev.iamkavindu.streamapp.backend.support.IntegrationTest;
 import dev.iamkavindu.streamapp.backend.support.TestData;
 import dev.iamkavindu.streamapp.backend.video.model.VideoStatus;
 import org.junit.jupiter.api.Test;
+import org.jooq.DSLContext;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
+import java.time.OffsetDateTime;
 import java.util.UUID;
+
+import static dev.iamkavindu.streamapp.backend.jooq.tables.Videos.VIDEOS;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -19,6 +24,9 @@ class VideoRepositoryIntegrationTest {
 
     @Autowired
     VideoRepository videoRepository;
+
+    @Autowired
+    DSLContext dsl;
 
     @Test
     void createPendingUploadEntry_persistsAwaitingUpload() {
@@ -97,6 +105,23 @@ class VideoRepositoryIntegrationTest {
         }
         assertThat(videoRepository.findByUploadId(uploadId).orElseThrow().status())
                 .isEqualTo(VideoStatus.AWAITING_UPLOAD);
+    }
+
+    @Test
+    void refreshAwaitingUpload_extendsActivityWithoutRevivingTerminalRows() {
+        var uploadId = UUID.randomUUID();
+        videoRepository.createPendingUploadEntry(uploadId, "retry.mp4", TestData.uniqueShaBytes());
+        var old = OffsetDateTime.now().minusHours(1);
+        dsl.update(VIDEOS).set(VIDEOS.CREATED_AT, old).set(VIDEOS.UPDATED_AT, old)
+                .where(VIDEOS.UPLOAD_ID.eq(uploadId)).execute();
+        videoRepository.refreshAwaitingUpload(uploadId);
+        videoRepository.markStaleAwaitingUploadsFailed(Duration.ofMinutes(30));
+        assertThat(videoRepository.findByUploadId(uploadId).orElseThrow().status())
+                .isEqualTo(VideoStatus.AWAITING_UPLOAD);
+        videoRepository.completeTranscode(uploadId, VideoStatus.FAILED);
+        var failed = videoRepository.findByUploadId(uploadId).orElseThrow();
+        videoRepository.refreshAwaitingUpload(uploadId);
+        assertThat(videoRepository.findByUploadId(uploadId).orElseThrow()).isEqualTo(failed);
     }
 
     @Test

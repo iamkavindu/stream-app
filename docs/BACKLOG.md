@@ -91,11 +91,18 @@ Use one branch and one PR per bounded change. An item can have several PRs when 
 
 ## Delivery status
 
-GitHub access is connected. PRs #1–#4 are merged; local verification was confirmed by the user. Changes are reviewed and merged manually.
+GitHub access is connected. PRs #1–#5 are merged; local verification was confirmed by the user. Changes are reviewed and merged manually.
 
 | Task | Branch | Status | Validation |
 |---|---|---|---|
 | SA-001 | `fix/sa-001-compose-endpoint` | Merged in PR #2; locally verified | Static checks passed; the user confirmed successful local Docker initialization before merging. |
 | SA-002 | `fix/sa-002-frontend-build` | Merged in PR #3; locally verified | All 78 Vitest tests and production build passed here; the user also confirmed passing local tests/build before merging. |
 | SA-003 | `fix/sa-003-completion-ordering` | Merged in PR #4; locally verified | User corrected the Mockito import and confirmed the default backend Maven suite passed on Linux. |
-| SA-004 | `fix/sa-004-result-publication` | Implemented; compilation/tests and deployed redelivery pending | Java syntax parsing and diff checks pass. Added deterministic publication/storage/worker-failure tests; full Lambda Maven suite requires local verification. Coordinate with SA-006/SA-009 for bounded retries/idempotency. |
+| SA-004 | `fix/sa-004-result-publication` | Merged in PR #5; JVM tests locally verified | User confirmed Lambda-module tests pass. Native/deployed outage/redelivery acceptance remains pending; coordinate with SA-006/SA-009. |
+| SA-005 / slice 1 | `fix/sa-005-upload-retry` | Partial implementation; backend verification pending | Known-ID transfer retries and source reconciliation; 84 frontend tests and production build pass. Backend tests include Floci conditional PUT acceptance and must run locally. |
+
+### Remaining SA-005 slices
+
+- Slice 2: recover lost registration responses using a durable idempotency key, preserving current duplicate-ready-content conflicts.
+- Slice 3: distinguish abandoned/expired transfer sessions from failed processing and recover eligible expired sessions without permanently reserving their hash. Coordinate this contract with SA-008 before resetting terminal states.
+- Do not mark SA-005 complete until these scenarios and the full ambiguous/concurrent PUT acceptance checks pass.

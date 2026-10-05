@@ -13,6 +13,7 @@ import software.amazon.awssdk.services.s3.S3Client;
 
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -106,5 +107,42 @@ class VideoApiIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.objectKey").value(uploadId + "/index.m3u8"))
                 .andExpect(jsonPath("$.signedUrl").isString());
+    }
+    @Test
+    void retryUpload_missingSourceReturnsUrlForSameId() throws Exception {
+        var uploadId = UUID.randomUUID();
+        videoRepository.createPendingUploadEntry(uploadId, "retry.mp4", TestData.uniqueShaBytes());
+        mockMvc.perform(post("/api/v1/videos/{uploadId}/upload-url", uploadId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.uploadId").value(uploadId.toString()))
+                .andExpect(jsonPath("$.sourceReceived").value(false))
+                .andExpect(jsonPath("$.signedUrl").isString());
+    }
+
+    @Test
+    void retryUpload_presentSourceSkipsTransferAndObservesUpload() throws Exception {
+        var uploadId = UUID.randomUUID();
+        videoRepository.createPendingUploadEntry(uploadId, "received.mp4", TestData.uniqueShaBytes());
+        s3Client.putObject(b -> b.bucket("streamapp-uploads").key(uploadId + "/received.mp4"),
+                RequestBody.fromString("received"));
+        mockMvc.perform(post("/api/v1/videos/{uploadId}/upload-url", uploadId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sourceReceived").value(true))
+                .andExpect(jsonPath("$.signedUrl").doesNotExist());
+        assertThat(videoRepository.findByUploadId(uploadId).orElseThrow().status())
+                .isEqualTo(VideoStatus.TRANSCODING_IN_PROGRESS);
+    }
+
+    @Test
+    void retryUpload_unknownReturns404AndFailedReturns409() throws Exception {
+        mockMvc.perform(post("/api/v1/videos/{uploadId}/upload-url", UUID.randomUUID()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.type").value("https://stream-app.dev/problems/video-not-found"));
+        var uploadId = UUID.randomUUID();
+        videoRepository.createPendingUploadEntry(uploadId, "failed.mp4", TestData.uniqueShaBytes());
+        videoRepository.updateStatus(uploadId, VideoStatus.AWAITING_UPLOAD, VideoStatus.FAILED);
+        mockMvc.perform(post("/api/v1/videos/{uploadId}/upload-url", uploadId))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.type").value("https://stream-app.dev/problems/upload-not-retryable"));
     }
 }

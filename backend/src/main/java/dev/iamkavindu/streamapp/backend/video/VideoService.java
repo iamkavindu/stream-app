@@ -18,6 +18,8 @@ import dev.iamkavindu.streamapp.backend.exception.VideoNotFoundException;
 
 import dev.iamkavindu.streamapp.backend.exception.VideoNotReadyException;
 
+import dev.iamkavindu.streamapp.backend.exception.UploadNotRetryableException;
+
 import dev.iamkavindu.streamapp.backend.video.model.SignedGetUrlRecord;
 
 import dev.iamkavindu.streamapp.backend.video.model.SignedUrlCreatedRecord;
@@ -27,6 +29,8 @@ import dev.iamkavindu.streamapp.backend.video.model.VideoRecord;
 import dev.iamkavindu.streamapp.backend.video.model.VideoStatus;
 
 import dev.iamkavindu.streamapp.backend.video.model.VideoStatusUpdateRecord;
+
+import dev.iamkavindu.streamapp.backend.video.model.UploadRetryRecord;
 
 import io.awspring.cloud.sqs.annotation.SqsListener;
 
@@ -133,6 +137,25 @@ public class VideoService {
     }
 
 
+
+    @Transactional
+    public UploadRetryRecord retryUpload(UUID uploadId) {
+        var video = videoRepository.findByUploadIdForUpdate(uploadId)
+                .orElseThrow(() -> new VideoNotFoundException(uploadId));
+        if (video.status() == VideoStatus.FAILED) {
+            throw new UploadNotRetryableException(uploadId, video.status());
+        }
+        if (video.status() == VideoStatus.PLAY_READY || video.status() == VideoStatus.TRANSCODING_IN_PROGRESS) {
+            return new UploadRetryRecord(uploadId, video.fileName(), true, null);
+        }
+        if (s3Service.uploadSourceExists(uploadId, video.fileName())) {
+            videoRepository.updateStatus(uploadId, VideoStatus.AWAITING_UPLOAD, VideoStatus.TRANSCODING_IN_PROGRESS);
+            return new UploadRetryRecord(uploadId, video.fileName(), true, null);
+        }
+        videoRepository.refreshAwaitingUpload(uploadId);
+        var signedUrl = s3Service.createSignedPutUrl(uploadId, video.fileName());
+        return new UploadRetryRecord(uploadId, video.fileName(), false, signedUrl);
+    }
 
     public List<VideoRecord> listVideos() {
 

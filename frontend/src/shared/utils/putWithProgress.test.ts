@@ -52,6 +52,7 @@ describe('putFileWithProgress', () => {
     expect(xhr).toBeDefined()
     expect(xhr?.open).toHaveBeenCalledWith('PUT', 'https://s3.example/upload')
     expect(xhr?.setRequestHeader).toHaveBeenCalledWith('Content-Type', 'video/mp4')
+    expect(xhr?.setRequestHeader).toHaveBeenCalledWith('If-None-Match', '*')
 
     const progressHandler = xhr?.upload.addEventListener.mock.calls.find(
       ([event]) => event === 'progress',

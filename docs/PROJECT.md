@@ -87,9 +87,9 @@ Feature-based layout under `frontend/src/`:
 1. **Hashing** — SHA-256 via Web Crypto (`shared/utils/sha256.ts`)
 2. **Creating** — `POST /api/v1/videos` for presigned PUT URL
 3. **Uploading** — `PUT` to S3 with byte progress (`putFileWithProgress`)
-4. **Complete** or **Failed** — per-file result; failed items show which step broke, the API error message, and a **Retry** button that re-runs the pipeline from hashing
+4. **Complete** or **Failed** — registration is retained before PUT. After a transfer failure, **Retry** checks the existing upload and obtains a fresh URL without another registration or hash. If the source already arrived, it skips PUT. Failure before a registration response still restarts registration; lost-response idempotency remains the next SA-005 slice.
 
-Uploads run independently so new files can be added while others are in progress. Completed or failed items can be removed from the queue.
+Uploads run independently so new files can be added while others are in progress. Completed or failed items can be removed from the queue. Queue identity survives retries while this composable remains mounted; navigation/refresh persistence remains SA-018. Browser PUT sends `If-None-Match: *` to reject writes to an existing source when the emulator supports the condition. Floci acceptance is covered by `conditionalPresignedPut_preventsOverwriteOnFloci` and requires local execution. Older Floci images had a [conditional-write gap](https://github.com/floci-io/floci/issues/565) fixed in [upstream PR #566](https://github.com/floci-io/floci/pull/566); keep this test as a merge gate against the actual image. Direct clients must send the same header; the signed URL alone does not enforce the condition.
 
 **Env:** `VITE_API_BASE_URL` (optional). Empty in local dev uses Vite proxy (`/api` → `http://localhost:8080`). See `frontend/.env.example`.
 
@@ -201,9 +201,9 @@ FFmpeg flags (VOD fMP4 HLS, 4 s segments, single combined media file):
 
 Use `"status": "FAILED"` for a nonzero FFmpeg exit only after that result has been accepted by SQS. The backend atomically transitions either `AWAITING_UPLOAD` or `TRANSCODING_IN_PROGRESS` → `PLAY_READY` or `FAILED`, allowing completion to arrive before the separate upload notification.
 
-**Result publication and redelivery (SA-004):** Queue lookup, serialization, and send failures propagate out of the function. A failed `PLAY_READY` send is never converted to `FAILED`. A nonzero FFmpeg exit publishes `FAILED`; failure to publish it also fails the invocation. Source download, output upload, temporary-file/output-artifact problems, and inability to start FFmpeg fail the invocation without publishing a terminal result. Interrupted workers restore the interrupt flag. The existing best-effort temporary-directory cleanup runs in `finally` on every path, including publication failure; stricter cleanup/process bounds remain SA-011.
+**Result publication and redelivery (SA-004):** Queue lookup, serialization, and send failures propagate out of the function. A failed `PLAY_READY` send is never converted to `FAILED`. A nonzero FFmpeg exit publishes `FAILED`; failure to publish it also fails the invocation. Source download, output upload, temporary-file/output-artifact problems, and inability to start FFmpeg fail the invocation without publishing a terminal result. Interrupted workers restore the interrupt flag. The existing best-effort temporary-directory cleanup runs in `finally` on every path, including publication failure; stricter cleanup/process bounds remain SA-012.
 
-The current nonzero FFmpeg exit policy is retained; exit code alone does not identify every failure cause. More detailed media validation/failure classification remains SA-010. Redelivery can redo the transcode and overwrite output; attempt identity/idempotency remain SA-008/SA-009. The consumer throws for the whole batch, so earlier successful records may also be redelivered. Configure bounded retries, visibility timeout, and DLQs via SA-006 before presenting fault-recovery scenarios. Deployed/native Lambda redelivery still needs local acceptance verification.
+The current nonzero FFmpeg exit policy is retained; exit code alone does not identify every failure cause. More detailed media validation/failure classification remains SA-011. Redelivery can redo the transcode and overwrite output; attempt identity/idempotency remain SA-008/SA-009. The consumer throws for the whole batch, so earlier successful records may also be redelivered. Configure bounded retries, visibility timeout, and DLQs via SA-006 before presenting fault-recovery scenarios. Deployed/native Lambda redelivery still needs local acceptance verification.
 
 Example stream-bucket layout after transcode:
 
@@ -276,6 +276,7 @@ Table: `videos` (Flyway `V1__create_videos.sql`)
 | `GET` | `/api/v1/videos` | Implemented | List all videos from the `videos` table |
 | `GET` | `/api/v1/videos/{uploadId}/signed-url` | Implemented | Presigned S3 GET URL for `{uploadId}/index.m3u8` in `streamapp-streams` (HLS manifest; `PLAY_READY` only) |
 | `POST` | `/api/v1/videos` | Implemented | Create pending upload row and return presigned S3 PUT URL |
+| `POST` | `/api/v1/videos/{uploadId}/upload-url` | Implemented | Reconcile/renew an existing pending transfer; never register another row |
 
 **Request body** (`SignedUrlCreateRequest` — validated with `@Valid`):
 
@@ -303,7 +304,24 @@ Invalid requests return `400 Bad Request` (`validation-failed` ProblemDetail).
 }
 ```
 
-**Follow-up (client-side):** `PUT` the video bytes to `signedUrl` with appropriate `Content-Type` (e.g. `video/mp4`). See `stream_app-endpoints.http`.
+**Follow-up (client-side):** `PUT` with `If-None-Match: *` and the video bytes to `signedUrl` with appropriate `Content-Type` (e.g. `video/mp4`). See `stream_app-endpoints.http`.
+
+**Retry transfer** `POST /api/v1/videos/{uploadId}/upload-url` (no body) → `200 OK` (`UploadRetryRecord`):
+
+```json
+{
+  "uploadId": "550e8400-e29b-41d4-a716-446655440000",
+  "fileName": "dummy.mp4",
+  "sourceReceived": false,
+  "signedUrl": "http://localhost:4566/streamapp-uploads/..."
+}
+```
+
+- The video row is locked during reconciliation and signing. For `AWAITING_UPLOAD`, HEAD checks the source key. A 404 is accepted as missing only after confirming the bucket is accessible; other storage errors propagate.
+- A missing source receives a new 15-minute URL for the original key; activity (`updated_at`) is refreshed so cleanup does not immediately expire a recently renewed transfer. Identity and unique hash remain unchanged.
+- An existing source returns `sourceReceived: true`, `signedUrl: null` and observes the upload via the existing conditional transition to processing. Processing/ready rows also return received without signing. This indicates transfer completion, not playback readiness.
+- Unknown IDs return `404 video-not-found`; `FAILED` returns `409 upload-not-retryable`. No terminal status is revived. Registration idempotency and distinguishing expired uploads from processing failures remain later SA-005 slices coordinated with SA-008.
+- Browser conditional PUTs guard the HEAD-to-PUT race. A rejected conditional write remains a transfer error; pressing Retry reconciles the source again. Verifying declared checksum/size remains SA-011.
 
 **List videos** `200 OK` (`VideoRecord[]`):
 
@@ -333,11 +351,11 @@ Pass `signedUrl` to HLS.js as the manifest source. The manifest references `medi
 
 Returns `404 Not Found` when `uploadId` is not in the database. Returns `409 Conflict` (`video-not-ready`) when the video exists but is not `PLAY_READY`.
 
-**Orphan upload cleanup:** a scheduled job marks `AWAITING_UPLOAD` rows as `FAILED` when the client never completes the S3 PUT within a configurable TTL (default 30 minutes). Config in `application-dev.properties`:
+**Orphan upload cleanup:** a scheduled job marks `AWAITING_UPLOAD` rows as `FAILED` when the client never completes the S3 PUT within a configurable activity TTL (default 30 minutes). Cleanup compares `updated_at`; URL renewal refreshes it, while terminal states remain untouched. Config in `application-dev.properties`:
 
 | Property | Default | Purpose |
 |----------|---------|---------|
-| `streamapp.upload.awaiting-upload-ttl` | `30m` | Age after which pending uploads are failed |
+| `streamapp.upload.awaiting-upload-ttl` | `30m` | Inactivity after which pending uploads are failed |
 | `streamapp.upload.cleanup-interval` | `5m` | Delay between cleanup runs |
 | `streamapp.upload.cleanup.enabled` | `true` | Toggle scheduled cleanup |
 
@@ -379,7 +397,7 @@ Returns `404 Not Found` when `uploadId` is not in the database. Returns `409 Con
 - Vue 3 frontend with tabbed navigation (Upload | Stream)
 - Upload tab: persistent MP4 drop zone, multi-file queue, step chips, unified progress bar, per-file SHA-256 / signed-url / S3 PUT, RFC 7807 error alerts, and retry on failed uploads
 - Stream tab: video library from `GET /api/v1/videos`, auto-polling while videos transcode, signed manifest fetch, HLS.js player with distinct API vs playback error messages, failed-state playlist UX (`features/stream/`)
-- Vitest unit/component tests for upload and stream flows (78 tests across 18 files: composables, API clients, pure helpers, and UI components including `HlsPlayer`, `StreamPanel`, `FileDropZone`)
+- Vitest unit/component tests for upload and stream flows (84 tests across 18 files: composables, API clients, pure helpers, and UI components including `HlsPlayer`, `StreamPanel`, `FileDropZone`)
 - Transcode Lambda module (`transcode-lambda/`): SQS-triggered `Consumer<byte[]>` (raw SQS JSON parsed with Spring Jackson, not AWS `SQSEvent` serializers), SNS-wrapped S3 parsing, `HlsTranscodeCommand`, stream-bucket upload, `VideoStatusUpdateRecord` to `video-transcode-complete-backend`; WSL native build + Floci deploy scripts under `transcode-lambda/scripts/`
 - Root `README.md` with overview, diagrams, and local dev quick start
 - `POST /api/v1/videos` Bean Validation (`400 validation-failed` ProblemDetail)
@@ -393,8 +411,9 @@ Returns `404 Not Found` when `uploadId` is not in the database. Returns `409 Con
 
 ### Review baseline (2026-10-05)
 
-- PRs #1–#4 are merged. The user confirmed local Docker initialization for SA-001, frontend tests/build for SA-002, and the default backend Maven suite on Linux for SA-003 after correcting the Mockito import.
-- SA-004 result publication is implemented on its review branch. Java syntax parsing and diff checks pass; Maven compilation/tests remain pending because this environment cannot resolve dependencies and lacks Java 25/Docker.
+- PRs #1–#5 are merged. The user confirmed local Docker initialization for SA-001, frontend tests/build for SA-002, and the default backend Maven suite on Linux for SA-003 after correcting the Mockito import.
+- SA-004 is merged in PR #5; the user confirmed passing local Lambda-module tests. Native/deployed publication-outage recovery remains unverified.
+- SA-005 slice 1 retains known registration, renews pending transfers, and reconciles received sources. All 84 frontend tests and the production build pass; backend/Floci conditional-write acceptance requires local execution. The remaining SA-005 acceptance criteria are still pending.
 - SA-002 fixes the `StreamPanel.test.ts` assertion typing using `find(...).exists()`: all 78 Vitest tests and `npm run build` (type checking plus bundling) pass. Vite still reports a non-blocking large stream-player chunk warning.
 - Review environment: Node 24, Java 17, no Docker. Java 25 integration tests, native Lambda execution, and browser playback have not been verified in that environment.
 

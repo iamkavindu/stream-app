@@ -35,6 +35,14 @@ public class BackendExceptionHandler {
         return pd;
     }
 
+    @ExceptionHandler(UploadNotRetryableException.class)
+    public ProblemDetail uploadNotRetryable(UploadNotRetryableException e) {
+        var pd = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
+        pd.setTitle("Upload Not Retryable");
+        pd.setType(ProblemTypes.of("upload-not-retryable"));
+        return pd;
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ProblemDetail validationFailed(MethodArgumentNotValidException e) {
         var detail = e.getBindingResult().getFieldErrors().stream()

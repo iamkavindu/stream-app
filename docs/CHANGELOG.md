@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-10-05 — SA-005 slice 1: retry a known upload without duplicate registration
+
+**Summary:** Preserve registration before PUT and reconcile/renew that upload on retry instead of registering the same hash again.
+
+**Changed**
+
+- Backend video controller/service/repository and `UploadRetryRecord` — new retry endpoint, row lock during source reconciliation/signing, and activity refresh for pending transfers
+- `S3Service` — check source existence without treating missing bucket/access errors as a missing object
+- `UploadNotRetryableException` and ProblemDetail handler — explicit conflict for failed/expired terminal rows
+- Frontend upload API/composable — retain upload identity through transfer/renewal errors, skip already-received transfers, and avoid repeated hashing/registration after a PUT failure
+- Browser transfer utility — add `If-None-Match: *` to guard concurrent source overwrites
+- Backend and frontend regression tests — identity retention, renewal, received-source reconciliation, failed/unknown sessions, storage errors, cleanup activity, and Floci conditional-write acceptance
+- `docs/PROJECT.md`, `docs/BACKLOG.md` — document the API and remaining SA-005 slices; record PR #5 merge and user-confirmed passing Lambda tests
+
+**Validation:** All 84 frontend tests and the production build pass. Java syntax parsing and diff checks pass; backend compilation/tests and Floci conditional-write behavior require local verification (Java 25/Docker). No backend runtime success is claimed. Lost-registration idempotency and expired-session recovery remain pending, so SA-005 is not complete.
+
+---
+
 ## 2026-10-05 — SA-004: propagate lost processing-result publication
 
 **Summary:** Fail the Lambda invocation on publication and operational failures so redelivery can recover without reporting successful processing as a terminal failure.
