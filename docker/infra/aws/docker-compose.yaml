@@ -34,7 +34,7 @@ services:
     volumes:
       - ./init-aws-resources.sh:/init-aws-resources.sh:ro
     environment:
-      AWS_ENDPOINT_URL: http://localhost:4566
+      AWS_ENDPOINT_URL: http://floci:4566
       AWS_DEFAULT_REGION: us-east-1
       AWS_ACCESS_KEY_ID: test
       AWS_SECRET_ACCESS_KEY: test

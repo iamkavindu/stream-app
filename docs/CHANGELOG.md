@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-10-05 — SA-001: fix Compose bootstrap endpoint
+
+**Summary:** Point the AWS initialization container at the Floci service so it does not try to reach an AWS endpoint inside its own container.
+
+**Changed**
+
+- `docker/infra/aws/docker-compose.yaml` — use `http://floci:4566` for `aws-init`
+- `docs/PROJECT.md` — document host versus container endpoint selection
+- `docs/BACKLOG.md` — record implementation and outstanding Docker verification
+
+**Validation:** Compose YAML parsed and service/network configuration checked; shell syntax checked. Runtime initialization remains to be verified with Docker.
+
+---
+
 ## 2026-10-05 — Prioritized local-demo implementation backlog
 
 **Summary:** Scoped the remaining reliability, lifecycle, presentation, and release work against the reviewed code, preserving the existing architecture and coding conventions.

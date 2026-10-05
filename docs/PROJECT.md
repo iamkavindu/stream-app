@@ -419,6 +419,8 @@ docker compose -f docker/infra/aws/docker-compose.yaml up -d
 
 Floci uses hybrid persistent storage under `docker/infra/aws/data/`.
 
+**Endpoint by caller:** Compose's `aws-init` container uses `http://floci:4566` on the shared Docker network. Commands run on the host use `http://localhost:4566`. Inside `aws-init`, `localhost` refers to that container, not Floci.
+
 **Init order:** `aws-init` waits up to 120s for `streamapp-uploads` (created when the backend starts). If the bucket is not ready in time, the queue is still created but the S3 notification is skipped — re-run the script after starting the backend:
 
 ```bash

@@ -91,4 +91,8 @@ Use one branch and one PR per bounded change. An item can have several PRs when 
 
 ## Delivery status
 
-No implementation is marked merged or released by this planning commit. Follow-up commits record branch-level progress here; GitHub PR creation depends on authenticated repository access.
+No implementation is marked merged or released. GitHub PR creation depends on authenticated repository access.
+
+| Task | Branch | Status | Validation |
+|---|---|---|---|
+| SA-001 | `fix/sa-001-compose-endpoint` | Implemented; awaiting local Docker verification | Parsed Compose YAML, confirmed shared network/service endpoint, and checked shell syntax. Docker is unavailable here; run initialization with buckets present and verify SNS/SQS/S3 notification wiring locally. |
