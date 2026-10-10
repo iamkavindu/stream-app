@@ -10,7 +10,7 @@
 - `scripts/ci/summarize-surefire.py` and regression tests — aggregate XML reports, reject missing/empty/malformed/failed/skipped runs, and publish test counts plus excluded tiers in the job summary
 - Project/backlog — record PR #10 merge, new JVM gate, and remaining native/browser/PowerShell acceptance
 
-**Validation:** Four report-checker regression tests, workflow YAML/matrix/action-input inspection, and diff checks pass here. GitHub Java execution is pending; this workspace lacks Java 25 and Docker. Existing POM tag exclusions remain explicit; no application, dependency, wrapper, or lockfile changes are included.
+**Validation:** Four report-checker regression tests, workflow YAML/matrix/action-input inspection, and diff checks pass here. The first GitHub-hosted Java 25/Docker run passed 76 backend and 19 Lambda tests with zero failures/errors/skips, including fresh codegen and FFmpeg invalid-media verification; report gates/artifacts and frontend CI also passed. Existing POM tag exclusions remain explicit; no application, dependency, wrapper, or lockfile changes are included.
 
 ---
 

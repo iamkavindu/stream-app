@@ -564,7 +564,7 @@ The frontend job summary states what its tier covers. The first GitHub-hosted fr
 
 `.github/workflows/java-ci.yml` adds separate backend and Lambda JVM jobs on the same events using Java 25, Docker, and the committed Maven wrappers (`sh mvnw --batch-mode --no-transfer-progress clean test`). Backend jOOQ sources are freshly generated from Flyway/PostgreSQL; no generated-source bypass is used. The Lambda job installs and probes `/usr/bin/ffmpeg` so its default invalid-media integration test runs. The existing POM exclusion of `slow,pipeline` is retained. Matrix failures do not cancel the other module, reports are retained as artifacts for seven days, and Python report summaries reject missing/empty, malformed, failed, or unexpectedly skipped test runs. The report checker has four regression tests.
 
-Java CI execution is pending on its implementation PR. This JVM tier does not deploy/build a native Lambda or verify PowerShell/browser media delivery. The PR template records task/slice, compatibility, stack order, commands actually run, failed/skipped checks, and outstanding local reproduction. Deployed-native E2E remains SA-022/SA-023's later tier.
+The first hosted Java CI run passed 76 backend and 19 Lambda tests with no failures/errors/skips; fresh backend codegen and the actual FFmpeg invalid-media test ran. Frontend CI also passed on the same PR. This JVM tier does not deploy/build a native Lambda or verify PowerShell/browser media delivery. The PR template records task/slice, compatibility, stack order, commands actually run, failed/skipped checks, and outstanding local reproduction. Deployed-native E2E remains SA-022/SA-023's later tier.
 
 ## Key files
 
