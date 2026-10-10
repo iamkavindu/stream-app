@@ -203,7 +203,7 @@ Use `"status": "FAILED"` for a nonzero FFmpeg exit only after that result has be
 
 **Result publication and redelivery (SA-004):** Queue lookup, serialization, and send failures propagate out of the function. A failed `PLAY_READY` send is never converted to `FAILED`. A nonzero FFmpeg exit publishes `FAILED`; failure to publish it also fails the invocation. Source download, output upload, temporary-file/output-artifact problems, and inability to start FFmpeg fail the invocation without publishing a terminal result. Interrupted workers restore the interrupt flag. The existing best-effort temporary-directory cleanup runs in `finally` on every path, including publication failure; stricter cleanup/process bounds remain SA-012.
 
-The current nonzero FFmpeg exit policy is retained; exit code alone does not identify every failure cause. More detailed media validation/failure classification remains SA-011. Redelivery can redo the transcode and overwrite output; attempt identity/idempotency remain SA-008/SA-009. The consumer throws for the whole batch, so earlier successful records may also be redelivered. SA-006 slice 1 configures five receives before DLQ delivery, a 1,800-second Lambda source visibility window, and explicit retention; actual exhaustion/replay and native delivery verification remain pending before presenting fault-recovery scenarios. Deployed/native Lambda redelivery still needs local acceptance verification.
+The current nonzero FFmpeg exit policy is retained; exit code alone does not identify every failure cause. More detailed media validation/failure classification remains SA-011. Redelivery can redo the transcode and overwrite output; attempt identity/idempotency remain SA-008/SA-009. The consumer throws for the whole batch, so earlier successful records may also be redelivered. SA-006 slice 1 configures five receives before DLQ delivery, a 1,800-second Lambda source visibility window, and explicit retention; the user verified repeat provisioning, payload preservation, five-receive exhaustion, and DLQ replay on pinned Floci. Native delivery verification remains pending. Deployed/native Lambda redelivery still needs local acceptance verification.
 
 Example stream-bucket layout after transcode:
 
@@ -417,7 +417,7 @@ Returns `404 Not Found` when `uploadId` is not in the database. Returns `409 Con
 - SA-002 fixes the `StreamPanel.test.ts` assertion typing using `find(...).exists()`: all 78 Vitest tests and `npm run build` (type checking plus bundling) pass. Vite still reports a non-blocking large stream-player chunk warning.
 - Review environment: Node 24, Java 17, no Docker. Java 25 integration tests, native Lambda execution, and browser playback have not been verified in that environment.
 
-- SA-006 slice 1 adds explicit queue visibility/retention, three DLQs, repeatable delivery-policy updates, and deployment guards. Shell CLI-double tests pass; actual Floci redrive/replay, PowerShell, and native worker delivery remain local gates. See [queue-delivery.md](./queue-delivery.md).
+- SA-006 slice 1 adds explicit queue visibility/retention, three DLQs, repeatable delivery-policy updates, and deployment guards. Shell CLI-double tests and the user-run isolated Floci redrive/replay probe pass. PowerShell and native worker delivery remain unverified. See [queue-delivery.md](./queue-delivery.md).
 
 ## Local development
 

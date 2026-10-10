@@ -12,7 +12,7 @@
 - `docker/infra/aws/verify-queue-delivery.py` — isolated local Floci acceptance probe for repeat provisioning, payload preservation, five receives, DLQ arrival, and replay
 - Project/backlog and queue-delivery guide — record actual PR #6 results and outstanding local/native gates
 
-**Validation:** Two CLI-double shell tests, shell syntax, Python compilation/help, and diff checks pass. Docker/AWS CLI/PowerShell are unavailable here: the actual Floci probe, PowerShell parity, and native deployment/retry checks are pending. PR #6's user logs confirm 76 backend and 19 Lambda tests pass without skips on Java 27/Linux with Floci 2.1.0, including the original overwrite assertion and real FFmpeg invalid-media test. Fault-injection ERROR logs are expected test outcomes. Frontend tests/build were already green. Browser retry and Compose/native acceptance remain unconfirmed.
+**Validation:** Two CLI-double shell tests, shell syntax, Python compilation/help, and diff checks pass. The user ran the isolated probe against actual Floci and confirmed all three PASS results: repeat provisioning, payload preservation/exhaustion, and DLQ replay/acknowledgement. PowerShell parity and native deployment/retry checks remain unverified. PR #6's user logs confirm 76 backend and 19 Lambda tests pass without skips on Java 27/Linux with Floci 2.1.0, including the original overwrite assertion and real FFmpeg invalid-media test. Fault-injection ERROR logs are expected test outcomes. Frontend tests/build were already green. Browser retry and Compose/native acceptance remain unconfirmed.
 
 ---
 

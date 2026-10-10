@@ -100,9 +100,9 @@ GitHub access is connected. PRs #1–#5 are merged; local verification was confi
 | SA-003 | `fix/sa-003-completion-ordering` | Merged in PR #4; locally verified | User corrected the Mockito import and confirmed the default backend Maven suite passed on Linux. |
 | SA-004 | `fix/sa-004-result-publication` | Merged in PR #5; JVM tests locally verified | User confirmed Lambda-module tests pass. Native/deployed outage/redelivery acceptance remains pending; coordinate with SA-006/SA-009. |
 | SA-005 / slice 1 | `fix/sa-005-upload-retry` | PR #6 open; automated checks locally verified | 84 frontend tests/build pass here; user confirmed 76 backend and 19 Lambda JVM tests pass without skips on pinned Floci, including conditional PUT. Browser/Compose smoke acceptance remains pending. |
-| SA-006 / slice 1 | `fix/sa-006-queue-redrive` | Delivery provisioning implemented; local acceptance pending; stacked on PR #6 | Two shell CLI-double tests pass; isolated Floci probe prepared for updates, payload preservation, exhaustion, and replay. PowerShell/deployed native verification remains pending. |
+| SA-006 / slice 1 | `fix/sa-006-queue-redrive` | PR #7 ready for review; Floci acceptance passed; stacked on PR #6 | Two shell CLI-double tests pass; user confirmed repeat provisioning, payload preservation, five-receive exhaustion, and replay on actual Floci. PowerShell/deployed native verification remains pending. |
 
-SA-006 is partial until actual pinned-emulator redrive/replay and deployed native retry exhaustion are verified. A DLQ does not settle the database status; reconciliation remains SA-015. This slice does not add lifecycle-aware bulk replay.
+SA-006 is partial until PowerShell parity and deployed native retry exhaustion are verified; pinned-emulator redrive/replay passed. A DLQ does not settle the database status; reconciliation remains SA-015. This slice does not add lifecycle-aware bulk replay.
 
 ### Remaining SA-005 slices
 
