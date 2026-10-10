@@ -9,6 +9,13 @@ export interface SignedUrlCreatedResponse {
   fileName: string
 }
 
+export interface UploadRetryResponse {
+  uploadId: string
+  fileName: string
+  sourceReceived: boolean
+  signedUrl: string | null
+}
+
 export type UploadPhase = 'hashing' | 'creating' | 'uploading' | 'complete' | 'failed'
 
 export const UPLOAD_STEPS = ['hashing', 'creating', 'uploading'] as const

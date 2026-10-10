@@ -5,6 +5,7 @@ import dev.iamkavindu.streamapp.backend.aws.S3UploadEventParser;
 import dev.iamkavindu.streamapp.backend.exception.DuplicateVideoUploadException;
 import dev.iamkavindu.streamapp.backend.exception.VideoNotFoundException;
 import dev.iamkavindu.streamapp.backend.exception.VideoNotReadyException;
+import dev.iamkavindu.streamapp.backend.exception.UploadNotRetryableException;
 import dev.iamkavindu.streamapp.backend.support.TestData;
 import dev.iamkavindu.streamapp.backend.video.model.VideoRecord;
 import dev.iamkavindu.streamapp.backend.video.model.VideoStatus;
@@ -201,6 +202,70 @@ class VideoServiceUnitTest {
 
         assertThatThrownBy(() -> videoService.onTranscodeComplete(message))
                 .isInstanceOf(DataAccessResourceFailureException.class);
+    }
+
+    @Test
+    void retryUpload_missingSourceRenewsSameIdentityAndRefreshesActivity() {
+        var uploadId = UUID.randomUUID();
+        when(videoRepository.findByUploadIdForUpdate(uploadId))
+                .thenReturn(Optional.of(videoRecord(uploadId, VideoStatus.AWAITING_UPLOAD)));
+        when(s3Service.createSignedPutUrl(uploadId, "demo.mp4")).thenReturn("fresh-url");
+
+        var result = videoService.retryUpload(uploadId);
+
+        assertThat(result.uploadId()).isEqualTo(uploadId);
+        assertThat(result.signedUrl()).isEqualTo("fresh-url");
+        assertThat(result.sourceReceived()).isFalse();
+        verify(videoRepository).refreshAwaitingUpload(uploadId);
+        verify(videoRepository, never()).createPendingUploadEntry(any(), any(), any());
+    }
+
+    @Test
+    void retryUpload_sourceAlreadyReceivedDoesNotIssuePutUrl() {
+        var uploadId = UUID.randomUUID();
+        when(videoRepository.findByUploadIdForUpdate(uploadId))
+                .thenReturn(Optional.of(videoRecord(uploadId, VideoStatus.AWAITING_UPLOAD)));
+        when(s3Service.uploadSourceExists(uploadId, "demo.mp4")).thenReturn(true);
+
+        var result = videoService.retryUpload(uploadId);
+
+        assertThat(result.sourceReceived()).isTrue();
+        assertThat(result.signedUrl()).isNull();
+        verify(videoRepository).updateStatus(uploadId, VideoStatus.AWAITING_UPLOAD, VideoStatus.TRANSCODING_IN_PROGRESS);
+        verify(s3Service, never()).createSignedPutUrl(any(), any());
+    }
+
+    @Test
+    void retryUpload_processingAndReadyReturnReceivedWithoutResigning() {
+        var uploadId = UUID.randomUUID();
+        when(videoRepository.findByUploadIdForUpdate(uploadId)).thenReturn(
+                Optional.of(videoRecord(uploadId, VideoStatus.TRANSCODING_IN_PROGRESS)),
+                Optional.of(videoRecord(uploadId, VideoStatus.PLAY_READY)));
+        assertThat(videoService.retryUpload(uploadId).sourceReceived()).isTrue();
+        assertThat(videoService.retryUpload(uploadId).sourceReceived()).isTrue();
+        verifyNoInteractions(s3Service);
+    }
+
+    @Test
+    void retryUpload_unknownAndFailedAreRejected() {
+        var uploadId = UUID.randomUUID();
+        when(videoRepository.findByUploadIdForUpdate(uploadId)).thenReturn(
+                Optional.empty(), Optional.of(videoRecord(uploadId, VideoStatus.FAILED)));
+        assertThatThrownBy(() -> videoService.retryUpload(uploadId)).isInstanceOf(VideoNotFoundException.class);
+        assertThatThrownBy(() -> videoService.retryUpload(uploadId)).isInstanceOf(UploadNotRetryableException.class);
+        verifyNoInteractions(s3Service);
+    }
+
+    @Test
+    void retryUpload_storageErrorDoesNotIssueUrlOrRefreshActivity() {
+        var uploadId = UUID.randomUUID();
+        when(videoRepository.findByUploadIdForUpdate(uploadId))
+                .thenReturn(Optional.of(videoRecord(uploadId, VideoStatus.AWAITING_UPLOAD)));
+        when(s3Service.uploadSourceExists(uploadId, "demo.mp4"))
+                .thenThrow(new IllegalStateException("storage unavailable"));
+        assertThatThrownBy(() -> videoService.retryUpload(uploadId)).isInstanceOf(IllegalStateException.class);
+        verify(s3Service, never()).createSignedPutUrl(any(), any());
+        verify(videoRepository, never()).refreshAwaitingUpload(any());
     }
 
     private static VideoRecord videoRecord(UUID uploadId, VideoStatus status) {

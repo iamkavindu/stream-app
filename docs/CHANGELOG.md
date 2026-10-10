@@ -1,5 +1,69 @@
 # Changelog
 
+## 2026-10-11 — SA-019 slice 1: prevent stale playback and polling responses
+
+**Summary:** Keep selection and library state consistent under slow responses, route unmount, and failed polling.
+
+**Changed**
+
+- Stream playback composable — invalidate previous selection requests; ignore late URL/list callbacks after disposal; share in-flight list requests; schedule non-overlapping polls with capped error backoff
+- Library reconciliation — clear removed selections and non-ready playback, and load a selected processing video when it becomes ready
+- Deferred-response/fake-timer tests — stale successes/errors/loading, status changes, unmount, slow fetches, and backoff/recovery
+- Project/backlog — document the behavior, remaining access-expiry integration, and ready-for-review PR workflow
+
+**Validation:** Full frontend Vitest suite and production type-checked build pass. No API/schema/dependency changes; lockfiles, wrappers, and generated output are excluded. This slice does not verify actual media access or native Lambda delivery.
+
+---
+
+## 2026-10-11 — SA-006 slice 1: explicit queue delivery and dead-letter provisioning
+
+**Summary:** Configure bounded retries for all three message queues, including existing resources, and guard the native deployment against unsafe delivery settings.
+
+**Changed**
+
+- Shell and PowerShell AWS bootstrap — source visibility/retention, matching DLQs with longer retention and restricted redrive permission, and redrive policies reapplied on every run without queue replacement/purge
+- Native Lambda deployment script — require adequate source visibility and the expected DLQ, retain timeout 300 seconds, set batch size one/window zero on existing and new mappings, and stop on AWS mutation failures
+- `docker/infra/aws/tests/test_queue_bootstrap.py` — stateful CLI-double execution checks repeated updates preserve payloads and API failure stops provisioning
+- `docker/infra/aws/verify-queue-delivery.py` — isolated local Floci acceptance probe for repeat provisioning, payload preservation, five receives, DLQ arrival, and replay
+- Project/backlog and queue-delivery guide — record actual PR #6 results and outstanding local/native gates
+
+**Validation:** Two CLI-double shell tests, shell syntax, Python compilation/help, and diff checks pass. The user ran the isolated probe against actual Floci and confirmed all three PASS results: repeat provisioning, payload preservation/exhaustion, and DLQ replay/acknowledgement. PowerShell parity and native deployment/retry checks remain unverified. PR #6's user logs confirm 76 backend and 19 Lambda tests pass without skips on Java 27/Linux with Floci 2.1.0, including the original overwrite assertion and real FFmpeg invalid-media test. Fault-injection ERROR logs are expected test outcomes. Frontend tests/build were already green. Browser retry and Compose/native acceptance remain unconfirmed.
+
+---
+
+## 2026-10-06 — PR #6 backend test corrections and aligned Floci image
+
+**Summary:** Fix Mockito re-stubbing and align the emulator release used by tests and Compose while preserving the conditional-overwrite acceptance gate.
+
+**Changed**
+
+- `S3ServiceUnitTest` — use `doThrow` when replacing an existing throwing stub; assert the same 403/503 exception propagates without a bucket check
+- Backend and Lambda Testcontainers configurations — explicitly select `floci/floci:2.1.0` with the compatibility declaration required by Java module 2.0.0
+- `docker/infra/aws/docker-compose.yaml` — use the same release instead of floating `latest`
+- `docs/PROJECT.md` — record the image choice and actual test results
+
+**Validation:** User confirmed frontend tests pass. Initial backend run compiled and ran 76 tests: 74 passed, one conditional-write assertion failed (412 expected, 200 received on `hectorvent/floci:latest`), and one unit test errored during re-stubbing. The overwrite assertion and original-byte check remain unchanged. Diff and Java syntax checks pass for the correction; backend/Lambda runtime tests and Compose/native acceptance are pending because this workspace lacks Java 25/Docker and cached Maven dependencies.
+
+---
+
+## 2026-10-05 — SA-005 slice 1: retry a known upload without duplicate registration
+
+**Summary:** Preserve registration before PUT and reconcile/renew that upload on retry instead of registering the same hash again.
+
+**Changed**
+
+- Backend video controller/service/repository and `UploadRetryRecord` — new retry endpoint, row lock during source reconciliation/signing, and activity refresh for pending transfers
+- `S3Service` — check source existence without treating missing bucket/access errors as a missing object
+- `UploadNotRetryableException` and ProblemDetail handler — explicit conflict for failed/expired terminal rows
+- Frontend upload API/composable — retain upload identity through transfer/renewal errors, skip already-received transfers, and avoid repeated hashing/registration after a PUT failure
+- Browser transfer utility — add `If-None-Match: *` to guard concurrent source overwrites
+- Backend and frontend regression tests — identity retention, renewal, received-source reconciliation, failed/unknown sessions, storage errors, cleanup activity, and Floci conditional-write acceptance
+- `docs/PROJECT.md`, `docs/BACKLOG.md` — document the API and remaining SA-005 slices; record PR #5 merge and user-confirmed passing Lambda tests
+
+**Validation:** All 84 frontend tests and the production build pass. Java syntax parsing and diff checks pass; backend compilation/tests and Floci conditional-write behavior require local verification (Java 25/Docker). No backend runtime success is claimed. Lost-registration idempotency and expired-session recovery remain pending, so SA-005 is not complete.
+
+---
+
 ## 2026-10-05 — SA-004: propagate lost processing-result publication
 
 **Summary:** Fail the Lambda invocation on publication and operational failures so redelivery can recover without reporting successful processing as a terminal failure.

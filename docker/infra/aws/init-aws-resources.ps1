@@ -84,6 +84,33 @@ function Ensure-Queue {
     Write-Log "Queue ARN: $queueArn"
 }
 
+# Lambda timeout is 300s and its batch window is zero; visibility is 6 * 300s.
+function Ensure-QueueDelivery {
+    param([string]$QueueName, [int]$VisibilitySeconds)
+    $dlqName = "$QueueName-dlq"
+    Ensure-Queue -QueueName $dlqName
+    $sourceUrl = Invoke-AwsCmd sqs get-queue-url --queue-name $QueueName --query QueueUrl --output text
+    $dlqUrl = Invoke-AwsCmd sqs get-queue-url --queue-name $dlqName --query QueueUrl --output text
+    $sourceArn = Get-QueueArn -QueueName $QueueName
+    $dlqArn = Get-QueueArn -QueueName $dlqName
+    $attrsFile = New-TemporaryFile
+    try {
+        $allow = @{ redrivePermission = "byQueue"; sourceQueueArns = @($sourceArn) } | ConvertTo-Json -Compress
+        $attrs = @{ MessageRetentionPeriod = "1209600"; VisibilityTimeout = "30"; RedriveAllowPolicy = $allow }
+        Write-Utf8NoBom -Path $attrsFile.FullName -Content ($attrs | ConvertTo-Json -Compress)
+        $fileUri = "file://$($attrsFile.FullName -replace '\\', '/')"
+        Invoke-AwsCmd sqs set-queue-attributes --queue-url $dlqUrl --attributes $fileUri
+        $redrive = @{ deadLetterTargetArn = $dlqArn; maxReceiveCount = 5 } | ConvertTo-Json -Compress
+        $attrs = @{ VisibilityTimeout = "$VisibilitySeconds"; MessageRetentionPeriod = "345600"; RedrivePolicy = $redrive }
+        Write-Utf8NoBom -Path $attrsFile.FullName -Content ($attrs | ConvertTo-Json -Compress)
+        Invoke-AwsCmd sqs set-queue-attributes --queue-url $sourceUrl --attributes $fileUri
+        Write-Log "Delivery configured: $QueueName, visibility ${VisibilitySeconds}s, max receives 5 -> $dlqName"
+    }
+    finally {
+        Remove-Item -Path $attrsFile.FullName -Force -ErrorAction SilentlyContinue
+    }
+}
+
 function Get-QueueArn {
     param([string]$QueueName)
     $queueUrl = Invoke-AwsCmd sqs get-queue-url --queue-name $QueueName --query QueueUrl --output text
@@ -251,6 +278,9 @@ Ensure-Topic
 Ensure-Queue -QueueName $BackendQueueName
 Ensure-Queue -QueueName $LambdaQueueName
 Ensure-Queue -QueueName $TranscodeCompleteQueueName
+Ensure-QueueDelivery -QueueName $BackendQueueName -VisibilitySeconds 30
+Ensure-QueueDelivery -QueueName $LambdaQueueName -VisibilitySeconds 1800
+Ensure-QueueDelivery -QueueName $TranscodeCompleteQueueName -VisibilitySeconds 30
 Ensure-TopicPolicy
 Ensure-SnsQueuePolicy -QueueName $BackendQueueName
 Ensure-SnsQueuePolicy -QueueName $LambdaQueueName

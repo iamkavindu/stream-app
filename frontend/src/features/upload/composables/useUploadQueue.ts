@@ -1,6 +1,6 @@
 import { ref } from 'vue'
-import { createSignedUpload } from '@/features/upload/api/videoApi'
-import type { UploadQueueItem, UploadStep } from '@/features/upload/types'
+import { createSignedUpload, retryUpload } from '@/features/upload/api/videoApi'
+import type { SignedUrlCreatedResponse, UploadQueueItem, UploadStep } from '@/features/upload/types'
 import { isMp4File, isRemovablePhase } from '@/features/upload/types'
 import { getErrorMessage } from '@/shared/api/apiError'
 import { putFileWithProgress } from '@/shared/utils/putWithProgress'
@@ -45,16 +45,27 @@ export function useUploadQueue() {
     }
 
     try {
-      updateItem(id, { phase: 'hashing', error: null, failedAtPhase: null })
-      const digest = await sha256Hex(item.file)
-      updateItem(id, { sha256: digest, phase: 'creating' })
+      let signed: SignedUrlCreatedResponse
+      if (item.result) {
+        updateItem(id, { phase: 'creating', error: null, failedAtPhase: null })
+        const decision = await retryUpload(item.result.uploadId)
+        if (decision.sourceReceived) {
+          updateItem(id, { phase: 'complete', uploadProgress: 100 })
+          return
+        }
+        if (!decision.signedUrl) {
+          throw new Error('The upload could not be resumed. Please try again.')
+        }
+        signed = { uploadId: decision.uploadId, fileName: decision.fileName, signedUrl: decision.signedUrl }
+      } else {
+        updateItem(id, { phase: 'hashing', error: null, failedAtPhase: null })
+        const digest = await sha256Hex(item.file)
+        updateItem(id, { sha256: digest, phase: 'creating' })
+        signed = await createSignedUpload({ fileName: item.file.name, sha256Hex: digest })
+      }
 
-      const signed = await createSignedUpload({
-        fileName: item.file.name,
-        sha256Hex: digest,
-      })
-
-      updateItem(id, { phase: 'uploading', uploadProgress: 0 })
+      // Retain the server identity before PUT; a transfer failure must never register again.
+      updateItem(id, { phase: 'uploading', uploadProgress: 0, result: signed })
       await putFileWithProgress(signed.signedUrl, item.file, (percent) => {
         updateItem(id, { uploadProgress: percent })
       })
@@ -93,10 +104,9 @@ export function useUploadQueue() {
     }
 
     updateItem(id, {
-      phase: 'hashing',
-      sha256: null,
+      phase: item.result ? 'creating' : 'hashing',
+      sha256: item.result ? item.sha256 : null,
       uploadProgress: 0,
-      result: null,
       error: null,
       failedAtPhase: null,
     })

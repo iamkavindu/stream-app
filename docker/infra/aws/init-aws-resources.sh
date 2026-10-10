@@ -77,6 +77,27 @@ ensure_queue() {
   log "Queue ARN: ${queue_arn}"
 }
 
+# Apply to existing queues too; never purge or replace a queue to change delivery settings.
+# Lambda timeout is 300s with a zero batch window: visibility is 6 * 300s.
+ensure_queue_delivery() (
+  source_name="$1"
+  visibility="$2"
+  dlq_name="${source_name}-dlq"
+  ensure_queue "$dlq_name"
+  source_url="$(aws_cmd sqs get-queue-url --queue-name "$source_name" --query QueueUrl --output text)"
+  dlq_url="$(aws_cmd sqs get-queue-url --queue-name "$dlq_name" --query QueueUrl --output text)"
+  source_arn="$(get_queue_arn "$source_name")"
+  dlq_arn="$(get_queue_arn "$dlq_name")"
+  delivery_file="$(mktemp)"
+  trap 'rm -f "$delivery_file"' EXIT
+  # Attribute values are strings; nested policies are JSON encoded inside them.
+  printf '{"MessageRetentionPeriod":"1209600","VisibilityTimeout":"30","RedriveAllowPolicy":"{\\"redrivePermission\\":\\"byQueue\\",\\"sourceQueueArns\\":[\\"%s\\"]}"}\n' "$source_arn" > "$delivery_file"
+  aws_cmd sqs set-queue-attributes --queue-url "$dlq_url" --attributes "file://${delivery_file}"
+  printf '{"VisibilityTimeout":"%s","MessageRetentionPeriod":"345600","RedrivePolicy":"{\\"deadLetterTargetArn\\":\\"%s\\",\\"maxReceiveCount\\":5}"}\n' "$visibility" "$dlq_arn" > "$delivery_file"
+  aws_cmd sqs set-queue-attributes --queue-url "$source_url" --attributes "file://${delivery_file}"
+  log "Delivery configured: ${source_name}, visibility ${visibility}s, max receives 5 -> ${dlq_name}"
+)
+
 get_queue_arn() {
   queue_name="$1"
   queue_url="$(aws_cmd sqs get-queue-url --queue-name "$queue_name" --query QueueUrl --output text)"
@@ -185,6 +206,9 @@ main() {
   ensure_queue "$BACKEND_QUEUE_NAME"
   ensure_queue "$LAMBDA_QUEUE_NAME"
   ensure_queue "$TRANSCODE_COMPLETE_QUEUE_NAME"
+  ensure_queue_delivery "$BACKEND_QUEUE_NAME" 30
+  ensure_queue_delivery "$LAMBDA_QUEUE_NAME" 1800
+  ensure_queue_delivery "$TRANSCODE_COMPLETE_QUEUE_NAME" 30
   ensure_topic_policy
   ensure_sns_queue_policy "$BACKEND_QUEUE_NAME"
   ensure_sns_queue_policy "$LAMBDA_QUEUE_NAME"

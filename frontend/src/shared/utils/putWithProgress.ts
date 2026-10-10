@@ -7,6 +7,7 @@ export function putFileWithProgress(
     const xhr = new XMLHttpRequest()
     xhr.open('PUT', url)
     xhr.setRequestHeader('Content-Type', file.type || 'video/mp4')
+    xhr.setRequestHeader('If-None-Match', '*')
 
     xhr.upload.addEventListener('progress', (event) => {
       if (event.lengthComputable && event.total > 0) {

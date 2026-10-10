@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '@/shared/api/apiError'
-import { createSignedUpload } from '@/features/upload/api/videoApi'
+import { createSignedUpload, retryUpload } from '@/features/upload/api/videoApi'
 
 describe('createSignedUpload', () => {
   afterEach(() => {
@@ -70,5 +70,33 @@ describe('createSignedUpload', () => {
     await expect(
       createSignedUpload({ fileName: 'demo.mp4', sha256Hex: 'abc123' }),
     ).rejects.toBeInstanceOf(ApiError)
+  })
+})
+
+describe('retryUpload', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('renews the retained upload instead of registering another video', async () => {
+    const decision = { uploadId: 'same-id', fileName: 'demo.mp4', sourceReceived: false, signedUrl: 'fresh-url' }
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => decision })
+    vi.stubGlobal('fetch', fetchMock)
+    expect(await retryUpload('same-id')).toEqual(decision)
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/videos/same-id/upload-url', { method: 'POST' })
+  })
+
+  it('returns a received decision with no upload URL', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ uploadId: 'same-id', fileName: 'demo.mp4', sourceReceived: true, signedUrl: null }),
+    }))
+    expect((await retryUpload('same-id')).sourceReceived).toBe(true)
+  })
+
+  it('surfaces a non-retryable session as an API error', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false, status: 409, headers: { get: () => 'application/problem+json' },
+      json: async () => ({ status: 409, detail: 'Upload cannot be retried' }),
+    }))
+    await expect(retryUpload('same-id')).rejects.toMatchObject({ status: 409, message: 'Upload cannot be retried' })
   })
 })

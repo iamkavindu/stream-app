@@ -1,6 +1,6 @@
 import { apiBaseUrl } from '@/shared/config/env'
 import { readApiError } from '@/shared/api/apiError'
-import type { SignedUrlCreateRequest, SignedUrlCreatedResponse } from '@/features/upload/types'
+import type { SignedUrlCreateRequest, SignedUrlCreatedResponse, UploadRetryResponse } from '@/features/upload/types'
 
 export async function createSignedUpload(
   request: SignedUrlCreateRequest,
@@ -18,4 +18,14 @@ export async function createSignedUpload(
   }
 
   return (await response.json()) as SignedUrlCreatedResponse
+}
+
+export async function retryUpload(uploadId: string): Promise<UploadRetryResponse> {
+  const response = await fetch(`${apiBaseUrl}/api/v1/videos/${encodeURIComponent(uploadId)}/upload-url`, {
+    method: 'POST',
+  })
+  if (!response.ok) {
+    throw await readApiError(response)
+  }
+  return (await response.json()) as UploadRetryResponse
 }

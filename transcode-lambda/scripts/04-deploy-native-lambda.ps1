@@ -3,6 +3,12 @@
 
 $ErrorActionPreference = "Stop"
 
+# Native command failures do not obey ErrorActionPreference in Windows PowerShell.
+function Invoke-Aws {
+    & aws @args
+    if ($LASTEXITCODE -ne 0) { throw "AWS deployment command failed (exit $LASTEXITCODE)." }
+}
+
 $endpoint = "http://localhost:4566"
 $region = "us-east-1"
 $accountId = "000000000000"
@@ -10,13 +16,29 @@ $functionName = "streamapp-transcode-lambda"
 $zipFile = "target/native-deployment.zip"
 $lambdaQueue = "video-processing-lambda"
 $layerName = "local-ffmpeg-layer"
+$functionTimeoutSeconds = 300
+$batchWindowSeconds = 0
+
+# Bootstrap owns queue delivery settings. Reject stale configuration before deployment.
+$queueUrl = Invoke-Aws --endpoint-url $endpoint sqs get-queue-url --queue-name $lambdaQueue --query QueueUrl --output text
+$delivery = Invoke-Aws --endpoint-url $endpoint sqs get-queue-attributes --queue-url $queueUrl `
+    --attribute-names VisibilityTimeout RedrivePolicy --output json | ConvertFrom-Json
+if (-not $delivery.Attributes.RedrivePolicy) {
+    throw "Lambda queue has no redrive policy. Re-run the AWS resource bootstrap before deployment."
+}
+$redrive = $delivery.Attributes.RedrivePolicy | ConvertFrom-Json
+$expectedDlqArn = "arn:aws:sqs:${region}:${accountId}:${lambdaQueue}-dlq"
+if ([int]$delivery.Attributes.VisibilityTimeout -lt (6 * $functionTimeoutSeconds + $batchWindowSeconds) `
+    -or $redrive.deadLetterTargetArn -ne $expectedDlqArn -or [int]$redrive.maxReceiveCount -lt 5) {
+    throw "Lambda queue delivery settings are missing or unsafe. Re-run docker/infra/aws/init-aws-resources.ps1 (or .sh) before deployment."
+}
 
 if (-not (Test-Path $zipFile)) {
     Write-Error "Deployment package not found at $zipFile. Run scripts/03-package-native-lambda.ps1 first."
     exit 1
 }
 
-$layerVersions = aws --endpoint-url $endpoint lambda list-layer-versions `
+$layerVersions = Invoke-Aws --endpoint-url $endpoint lambda list-layer-versions `
     --layer-name $layerName `
     --region $region `
     --output json | ConvertFrom-Json
@@ -52,22 +74,22 @@ if ($LASTEXITCODE -eq 0) {
 
 if ($functionExists) {
     Write-Host "Updating function code..."
-    aws --endpoint-url $endpoint lambda update-function-code `
+    Invoke-Aws --endpoint-url $endpoint lambda update-function-code `
         --function-name $functionName `
         --zip-file "fileb://$zipFile" `
         --region $region
 
     Write-Host "Updating function configuration (layers, memory, timeout, env)..."
-    aws --endpoint-url $endpoint lambda update-function-configuration `
+    Invoke-Aws --endpoint-url $endpoint lambda update-function-configuration `
         --function-name $functionName `
         --region $region `
         --layers $layerArn `
         --memory-size 2048 `
-        --timeout 300 `
+        --timeout $functionTimeoutSeconds `
         --environment "Variables={$envVars}"
 } else {
     Write-Host "Creating function..."
-    aws --endpoint-url $endpoint lambda create-function `
+    Invoke-Aws --endpoint-url $endpoint lambda create-function `
         --function-name $functionName `
         --runtime provided.al2023 `
         --role "arn:aws:iam::${accountId}:role/local-execution-role" `
@@ -75,14 +97,14 @@ if ($functionExists) {
         --zip-file "fileb://$zipFile" `
         --layers $layerArn `
         --memory-size 2048 `
-        --timeout 300 `
+        --timeout $functionTimeoutSeconds `
         --region $region `
         --environment "Variables={$envVars}"
 }
 
 $queueArn = "arn:aws:sqs:${region}:${accountId}:${lambdaQueue}"
 Write-Host "Ensuring SQS event source mapping ($lambdaQueue -> $functionName)..."
-$existingMappings = aws --endpoint-url $endpoint lambda list-event-source-mappings `
+$existingMappings = Invoke-Aws --endpoint-url $endpoint lambda list-event-source-mappings `
     --function-name $functionName `
     --region $region `
     --output json | ConvertFrom-Json
@@ -91,15 +113,21 @@ $hasMapping = $false
 foreach ($mapping in $existingMappings.EventSourceMappings) {
     if ($mapping.EventSourceArn -eq $queueArn) {
         $hasMapping = $true
-        break
+        Invoke-Aws --endpoint-url $endpoint lambda update-event-source-mapping `
+            --uuid $mapping.UUID `
+            --batch-size 1 `
+            --maximum-batching-window-in-seconds $batchWindowSeconds `
+            --enabled `
+            --region $region
     }
 }
 
 if (-not $hasMapping) {
-    aws --endpoint-url $endpoint lambda create-event-source-mapping `
+    Invoke-Aws --endpoint-url $endpoint lambda create-event-source-mapping `
         --function-name $functionName `
         --event-source-arn $queueArn `
         --batch-size 1 `
+        --maximum-batching-window-in-seconds $batchWindowSeconds `
         --region $region
 }
 

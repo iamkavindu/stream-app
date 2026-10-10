@@ -68,7 +68,7 @@ Use one branch and one PR per bounded change. An item can have several PRs when 
 
 1. Select the highest-priority item with satisfied dependencies and define one reviewable slice.
 2. Branch from current `main` or explicitly declare the prerequisite branch. Commit only scoped code, meaningful regression coverage, and required documentation.
-3. PR explains the user-visible defect, resulting behavior, validation actually run, remaining manual checks, and task ID. No automatic merge.
+3. Create ready-for-review PRs, including stacks when needed. The agent handles scoped commits; the user reviews, supplies local verification when needed, and merges. PR explains the user-visible defect, resulting behavior, validation actually run, remaining manual checks, and task ID. No automatic merge.
 4. Reviewer runs any missing local checks; record results before marking **Done**. `Implemented / awaiting local verification` is distinct from `Done`.
 5. After merge, rebase dependent branches, update task state, and continue. Independent small fixes may proceed while integration work is blocked.
 
@@ -91,11 +91,23 @@ Use one branch and one PR per bounded change. An item can have several PRs when 
 
 ## Delivery status
 
-GitHub access is connected. PRs #1–#4 are merged; local verification was confirmed by the user. Changes are reviewed and merged manually.
+GitHub access is connected. PRs #1–#5 are merged; local verification was confirmed by the user. Changes are reviewed and merged manually.
 
 | Task | Branch | Status | Validation |
 |---|---|---|---|
 | SA-001 | `fix/sa-001-compose-endpoint` | Merged in PR #2; locally verified | Static checks passed; the user confirmed successful local Docker initialization before merging. |
 | SA-002 | `fix/sa-002-frontend-build` | Merged in PR #3; locally verified | All 78 Vitest tests and production build passed here; the user also confirmed passing local tests/build before merging. |
 | SA-003 | `fix/sa-003-completion-ordering` | Merged in PR #4; locally verified | User corrected the Mockito import and confirmed the default backend Maven suite passed on Linux. |
-| SA-004 | `fix/sa-004-result-publication` | Implemented; compilation/tests and deployed redelivery pending | Java syntax parsing and diff checks pass. Added deterministic publication/storage/worker-failure tests; full Lambda Maven suite requires local verification. Coordinate with SA-006/SA-009 for bounded retries/idempotency. |
+| SA-004 | `fix/sa-004-result-publication` | Merged in PR #5; JVM tests locally verified | User confirmed Lambda-module tests pass. Native/deployed outage/redelivery acceptance remains pending; coordinate with SA-006/SA-009. |
+| SA-005 / slice 1 | `fix/sa-005-upload-retry` | PR #6 open; automated checks locally verified | 84 frontend tests/build pass here; user confirmed 76 backend and 19 Lambda JVM tests pass without skips on pinned Floci, including conditional PUT. Browser/Compose smoke acceptance remains pending. |
+| SA-006 / slice 1 | `fix/sa-006-queue-redrive` | PR #7 ready for review; Floci acceptance passed; stacked on PR #6 | Two shell CLI-double tests pass; user confirmed repeat provisioning, payload preservation, five-receive exhaustion, and replay on actual Floci. PowerShell/deployed native verification remains pending. |
+
+| SA-019 / slice 1 | `fix/sa-019-playback-races` | Ready for review; stacked on PR #7 for documentation continuity | Deferred-response/fake-timer regressions cover stale selection, unmount, polling overlap/backoff, and library status/removal. Frontend tests and production build pass. Access-expiry/player retry integration remains a later slice with SA-007. |
+
+SA-006 is partial until PowerShell parity and deployed native retry exhaustion are verified; pinned-emulator redrive/replay passed. A DLQ does not settle the database status; reconciliation remains SA-015. This slice does not add lifecycle-aware bulk replay.
+
+### Remaining SA-005 slices
+
+- Slice 2: recover lost registration responses using a durable idempotency key, preserving current duplicate-ready-content conflicts.
+- Slice 3: distinguish abandoned/expired transfer sessions from failed processing and recover eligible expired sessions without permanently reserving their hash. Coordinate this contract with SA-008 before resetting terminal states.
+- Do not mark SA-005 complete until these scenarios and the full ambiguous/concurrent PUT acceptance checks pass.

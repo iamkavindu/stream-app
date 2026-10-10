@@ -4,6 +4,7 @@ import dev.iamkavindu.streamapp.backend.video.model.SignedGetUrlRecord;
 import dev.iamkavindu.streamapp.backend.video.model.SignedUrlCreateRequest;
 import dev.iamkavindu.streamapp.backend.video.model.SignedUrlCreatedRecord;
 import dev.iamkavindu.streamapp.backend.video.model.VideoRecord;
+import dev.iamkavindu.streamapp.backend.video.model.UploadRetryRecord;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -35,6 +36,11 @@ public class VideoController {
     @GetMapping("/{uploadId}/signed-url")
     ResponseEntity<SignedGetUrlRecord> getSignedGetUrl(@PathVariable UUID uploadId) {
         return ResponseEntity.ok(videoService.createSignedGetUrl(uploadId));
+    }
+
+    @PostMapping("/{uploadId}/upload-url")
+    ResponseEntity<UploadRetryRecord> retryUpload(@PathVariable UUID uploadId) {
+        return ResponseEntity.ok(videoService.retryUpload(uploadId));
     }
 
     @PostMapping
