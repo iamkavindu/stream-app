@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-10-11 — SA-023 slice 1: frontend CI and review evidence
+
+**Summary:** Run repeatable frontend checks on pull requests and capture validation scope before review.
+
+**Changed**
+
+- `.github/workflows/frontend-ci.yml` — locked npm installation, Vitest, production/type-check build, dependency-manifest diff check, read-only permissions, pinned action revisions, bounded runtime, and cancellation of superseded runs
+- `.github/pull_request_template.md` — task/slice, before/after behavior, compatibility, stack order, actual validation, and outstanding local reproduction
+- Project/backlog — describe this CI tier and its limits; record PRs #6–#8 merged and keep remaining browser/PowerShell/native gates explicit
+
+**Validation:** Workflow YAML and verified action inputs pass inspection. A clean `npm ci`, all 95 frontend tests, the production/type-checked build, and dependency-manifest/diff checks pass locally on Node 24.19.0. GitHub-hosted execution remains pending; frontend CI does not replace Java/Floci, native Lambda, PowerShell, or browser playback acceptance. No lockfile, wrapper, dependency, or application-code changes are included.
+
+---
+
 ## 2026-10-11 — SA-019 slice 1: prevent stale playback and polling responses
 
 **Summary:** Keep selection and library state consistent under slow responses, route unmount, and failed polling.

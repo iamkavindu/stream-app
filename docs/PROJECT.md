@@ -411,7 +411,7 @@ Returns `404 Not Found` when `uploadId` is not in the database. Returns `409 Con
 
 ### Review baseline (2026-10-05)
 
-- PRs #1–#5 are merged. The user confirmed local Docker initialization for SA-001, frontend tests/build for SA-002, and the default backend Maven suite on Linux for SA-003 after correcting the Mockito import.
+- PRs #1–#8 are merged. The user confirmed local Docker initialization for SA-001, frontend tests/build for SA-002, and the default backend Maven suite on Linux for SA-003 after correcting the Mockito import.
 - SA-004 is merged in PR #5; the user confirmed passing local Lambda-module tests. Native/deployed publication-outage recovery remains unverified.
 - SA-005 slice 1 retains known registration, renews pending transfers, and reconciles received sources. All 84 frontend tests and the production build pass; the initial user backend run passed 74 of 76 tests, exposing a Mockito re-stubbing error and ignored conditional writes on `hectorvent/floci:latest`. The user then confirmed all 76 backend and 19 Lambda JVM tests pass, with no skips, on Java 27/Linux using `floci/floci:2.1.0`; the conditional-overwrite test passes. Browser retry and Compose/native smoke checks remain pending. The remaining SA-005 acceptance criteria are still pending.
 - SA-002 fixes the `StreamPanel.test.ts` assertion typing using `find(...).exists()`: all 78 Vitest tests and `npm run build` (type checking plus bundling) pass. Vite still reports a non-blocking large stream-player chunk warning.
@@ -555,6 +555,12 @@ Uses `testcontainers-jooq-codegen-maven-plugin` (not `DDLDatabase`). The old `DD
 | Flyway schema | `streamapp` (`createSchemas=true`) |
 | Generated package | `dev.iamkavindu.streamapp.backend.jooq` |
 | Skip flag | `-Djooq.codegen.skip=true` |
+
+## Pull request validation
+
+`.github/workflows/frontend-ci.yml` runs on every pull request, pushes to `main`, and manual dispatch. The stable `Frontend tests and build` job uses Ubuntu 24.04 and Node 24.19.0, `npm ci` from the committed lockfile, all Vitest tests, and the production/type-checked build. Actions are pinned to verified commit revisions, token permissions are read-only, checkout credentials are not persisted, and superseded runs are cancelled. No path filtering skips the check on documentation-only PRs, so it can be made required in repository settings without leaving a pending check. Branch protection is not configured by this change.
+
+The job summary states what this tier covers. Java/Floci, PowerShell, deployed native Lambda, and browser media/seek acceptance remain separate gates. The PR template records task/slice, behavior, compatibility, stack order, commands actually run, failed/skipped checks, and outstanding local reproduction. GitHub execution remains pending until the new workflow runs.
 
 ## Key files
 
