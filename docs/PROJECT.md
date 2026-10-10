@@ -560,7 +560,7 @@ Uses `testcontainers-jooq-codegen-maven-plugin` (not `DDLDatabase`). The old `DD
 
 `.github/workflows/frontend-ci.yml` runs on every pull request, pushes to `main`, and manual dispatch. The stable `Frontend tests and build` job uses Ubuntu 24.04 and Node 24.19.0, `npm ci` from the committed lockfile, all Vitest tests, and the production/type-checked build. Actions are pinned to verified commit revisions, token permissions are read-only, checkout credentials are not persisted, and superseded runs are cancelled. No path filtering skips the check on documentation-only PRs, so it can be made required in repository settings without leaving a pending check. Branch protection is not configured by this change.
 
-The job summary states what this tier covers. Java/Floci, PowerShell, deployed native Lambda, and browser media/seek acceptance remain separate gates. The PR template records task/slice, behavior, compatibility, stack order, commands actually run, failed/skipped checks, and outstanding local reproduction. GitHub execution remains pending until the new workflow runs.
+The job summary states what this tier covers. Java/Floci, PowerShell, deployed native Lambda, and browser media/seek acceptance remain separate gates. The PR template records task/slice, behavior, compatibility, stack order, commands actually run, failed/skipped checks, and outstanding local reproduction. The first GitHub-hosted run passed locked installation, tests, build/type checking, and the manifest diff check.
 
 ## Key files
 
