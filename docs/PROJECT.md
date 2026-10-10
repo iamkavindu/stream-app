@@ -203,7 +203,7 @@ Use `"status": "FAILED"` for a nonzero FFmpeg exit only after that result has be
 
 **Result publication and redelivery (SA-004):** Queue lookup, serialization, and send failures propagate out of the function. A failed `PLAY_READY` send is never converted to `FAILED`. A nonzero FFmpeg exit publishes `FAILED`; failure to publish it also fails the invocation. Source download, output upload, temporary-file/output-artifact problems, and inability to start FFmpeg fail the invocation without publishing a terminal result. Interrupted workers restore the interrupt flag. The existing best-effort temporary-directory cleanup runs in `finally` on every path, including publication failure; stricter cleanup/process bounds remain SA-012.
 
-The current nonzero FFmpeg exit policy is retained; exit code alone does not identify every failure cause. More detailed media validation/failure classification remains SA-011. Redelivery can redo the transcode and overwrite output; attempt identity/idempotency remain SA-008/SA-009. The consumer throws for the whole batch, so earlier successful records may also be redelivered. Configure bounded retries, visibility timeout, and DLQs via SA-006 before presenting fault-recovery scenarios. Deployed/native Lambda redelivery still needs local acceptance verification.
+The current nonzero FFmpeg exit policy is retained; exit code alone does not identify every failure cause. More detailed media validation/failure classification remains SA-011. Redelivery can redo the transcode and overwrite output; attempt identity/idempotency remain SA-008/SA-009. The consumer throws for the whole batch, so earlier successful records may also be redelivered. SA-006 slice 1 configures five receives before DLQ delivery, a 1,800-second Lambda source visibility window, and explicit retention; actual exhaustion/replay and native delivery verification remain pending before presenting fault-recovery scenarios. Deployed/native Lambda redelivery still needs local acceptance verification.
 
 Example stream-bucket layout after transcode:
 
@@ -413,9 +413,11 @@ Returns `404 Not Found` when `uploadId` is not in the database. Returns `409 Con
 
 - PRs #1–#5 are merged. The user confirmed local Docker initialization for SA-001, frontend tests/build for SA-002, and the default backend Maven suite on Linux for SA-003 after correcting the Mockito import.
 - SA-004 is merged in PR #5; the user confirmed passing local Lambda-module tests. Native/deployed publication-outage recovery remains unverified.
-- SA-005 slice 1 retains known registration, renews pending transfers, and reconciles received sources. All 84 frontend tests and the production build pass; the initial user backend run passed 74 of 76 tests, exposing a Mockito re-stubbing error and ignored conditional writes on `hectorvent/floci:latest`. The test fix and explicit `floci/floci:2.1.0` pin require a new local backend run. The remaining SA-005 acceptance criteria are still pending.
+- SA-005 slice 1 retains known registration, renews pending transfers, and reconciles received sources. All 84 frontend tests and the production build pass; the initial user backend run passed 74 of 76 tests, exposing a Mockito re-stubbing error and ignored conditional writes on `hectorvent/floci:latest`. The user then confirmed all 76 backend and 19 Lambda JVM tests pass, with no skips, on Java 27/Linux using `floci/floci:2.1.0`; the conditional-overwrite test passes. Browser retry and Compose/native smoke checks remain pending. The remaining SA-005 acceptance criteria are still pending.
 - SA-002 fixes the `StreamPanel.test.ts` assertion typing using `find(...).exists()`: all 78 Vitest tests and `npm run build` (type checking plus bundling) pass. Vite still reports a non-blocking large stream-player chunk warning.
 - Review environment: Node 24, Java 17, no Docker. Java 25 integration tests, native Lambda execution, and browser playback have not been verified in that environment.
+
+- SA-006 slice 1 adds explicit queue visibility/retention, three DLQs, repeatable delivery-policy updates, and deployment guards. Shell CLI-double tests pass; actual Floci redrive/replay, PowerShell, and native worker delivery remain local gates. See [queue-delivery.md](./queue-delivery.md).
 
 ## Local development
 
@@ -445,7 +447,7 @@ docker compose -f docker/infra/aws/docker-compose.yaml up -d
 | Floci UI | `4500` | Web UI for browsing buckets/objects |
 | `aws-init` | — | One-shot init: SNS topic, SQS queues, S3→SNS notification |
 
-Compose, backend Testcontainers, and Lambda Testcontainers explicitly use `floci/floci:2.1.0`. The Java module remains at 2.0.0; its default is the legacy `hectorvent/floci:latest`, so both test configurations declare the replacement image as compatible. See the [release](https://github.com/floci-io/floci/releases/tag/2.1.0). This pin avoids silently testing a different/cached `latest` image; conditional-write and deployed/native behavior still require local verification after the change.
+Compose, backend Testcontainers, and Lambda Testcontainers explicitly use `floci/floci:2.1.0`. The Java module remains at 2.0.0; its default is the legacy `hectorvent/floci:latest`, so both test configurations declare the replacement image as compatible. See the [release](https://github.com/floci-io/floci/releases/tag/2.1.0). This pin avoids silently testing a different/cached `latest` image; conditional-write acceptance passed in the user's backend suite; Compose/native behavior still requires local verification.
 
 Floci uses hybrid persistent storage under `docker/infra/aws/data/`.
 
@@ -477,6 +479,8 @@ $env:AWS_ENDPOINT_URL = "http://localhost:4566"
 | SQS queue | `video-transcode-complete-backend` | Lambda → backend `PLAY_READY` / `FAILED` |
 | Topic / queue policies | — | S3 → SNS; SNS → SQS; Lambda → transcode-complete queue |
 | S3 notification | `streamapp-uploads` → SNS | Event `s3:ObjectCreated:*` |
+
+Each source queue has a matching `<source-name>-dlq`. Bootstrap reapplies delivery settings on existing queues: source retention 4 days, DLQ retention 14 days, maxReceiveCount 5, backend/completion visibility 30 seconds, and Lambda-source visibility 1,800 seconds. The deployment script retains a 300-second function timeout, enforces batch size one/window zero on new and existing mappings, and rejects a missing/wrong DLQ or insufficient visibility before deployment. See [delivery verification and replay](./queue-delivery.md). Queues are never purged/replaced during bootstrap; configured retention still expires old messages normally. DLQ arrival does not itself change the video's DB status.
 
 Buckets (`streamapp-uploads`, `streamapp-streams`) and browser CORS remain backend responsibilities (`ResourceInitialize`, `dev` profile).
 

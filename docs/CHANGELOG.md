@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-10-11 — SA-006 slice 1: explicit queue delivery and dead-letter provisioning
+
+**Summary:** Configure bounded retries for all three message queues, including existing resources, and guard the native deployment against unsafe delivery settings.
+
+**Changed**
+
+- Shell and PowerShell AWS bootstrap — source visibility/retention, matching DLQs with longer retention and restricted redrive permission, and redrive policies reapplied on every run without queue replacement/purge
+- Native Lambda deployment script — require adequate source visibility and the expected DLQ, retain timeout 300 seconds, set batch size one/window zero on existing and new mappings, and stop on AWS mutation failures
+- `docker/infra/aws/tests/test_queue_bootstrap.py` — stateful CLI-double execution checks repeated updates preserve payloads and API failure stops provisioning
+- `docker/infra/aws/verify-queue-delivery.py` — isolated local Floci acceptance probe for repeat provisioning, payload preservation, five receives, DLQ arrival, and replay
+- Project/backlog and queue-delivery guide — record actual PR #6 results and outstanding local/native gates
+
+**Validation:** Two CLI-double shell tests, shell syntax, Python compilation/help, and diff checks pass. Docker/AWS CLI/PowerShell are unavailable here: the actual Floci probe, PowerShell parity, and native deployment/retry checks are pending. PR #6's user logs confirm 76 backend and 19 Lambda tests pass without skips on Java 27/Linux with Floci 2.1.0, including the original overwrite assertion and real FFmpeg invalid-media test. Fault-injection ERROR logs are expected test outcomes. Frontend tests/build were already green. Browser retry and Compose/native acceptance remain unconfirmed.
+
+---
+
 ## 2026-10-06 — PR #6 backend test corrections and aligned Floci image
 
 **Summary:** Fix Mockito re-stubbing and align the emulator release used by tests and Compose while preserving the conditional-overwrite acceptance gate.
