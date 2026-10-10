@@ -1,0 +1,64 @@
+name: Java CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: java-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  java:
+    name: JVM tests (${{ matrix.module }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        module: [backend, transcode-lambda]
+    steps:
+      - name: Check out source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Set up Java
+        uses: actions/setup-java@dded0888837ed1f317902acf8a20df0ad188d165 # v5.0.0
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+          cache-dependency-path: |
+            backend/pom.xml
+            transcode-lambda/pom.xml
+            backend/.mvn/wrapper/maven-wrapper.properties
+            transcode-lambda/.mvn/wrapper/maven-wrapper.properties
+      - name: Check Docker
+        run: docker info
+      - name: Install FFmpeg
+        if: matrix.module == 'transcode-lambda'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends ffmpeg
+          /usr/bin/ffmpeg -version
+      - name: Verify report checker
+        run: python3 -m unittest discover -s scripts/ci/tests
+      - name: Run JVM tests with fresh generated sources
+        working-directory: ${{ matrix.module }}
+        run: sh mvnw --batch-mode --no-transfer-progress clean test
+      - name: Summarize reports and reject unexpected skips
+        if: always()
+        run: python3 scripts/ci/summarize-surefire.py '${{ matrix.module }}/target/surefire-reports'
+      - name: Preserve test reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: surefire-${{ matrix.module }}
+          path: ${{ matrix.module }}/target/surefire-reports/
+          if-no-files-found: warn
+          retention-days: 7

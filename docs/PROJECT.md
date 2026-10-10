@@ -560,7 +560,11 @@ Uses `testcontainers-jooq-codegen-maven-plugin` (not `DDLDatabase`). The old `DD
 
 `.github/workflows/frontend-ci.yml` runs on every pull request, pushes to `main`, and manual dispatch. The stable `Frontend tests and build` job uses Ubuntu 24.04 and Node 24.19.0, `npm ci` from the committed lockfile, all Vitest tests, and the production/type-checked build. Actions are pinned to verified commit revisions, token permissions are read-only, checkout credentials are not persisted, and superseded runs are cancelled. No path filtering skips the check on documentation-only PRs, so it can be made required in repository settings without leaving a pending check. Branch protection is not configured by this change.
 
-The job summary states what this tier covers. Java/Floci, PowerShell, deployed native Lambda, and browser media/seek acceptance remain separate gates. The PR template records task/slice, behavior, compatibility, stack order, commands actually run, failed/skipped checks, and outstanding local reproduction. The first GitHub-hosted run passed locked installation, tests, build/type checking, and the manifest diff check.
+The frontend job summary states what its tier covers. The first GitHub-hosted frontend run passed locked installation, tests, build/type checking, and the manifest diff check. PR #10 is merged.
+
+`.github/workflows/java-ci.yml` adds separate backend and Lambda JVM jobs on the same events using Java 25, Docker, and the committed Maven wrappers (`sh mvnw --batch-mode --no-transfer-progress clean test`). Backend jOOQ sources are freshly generated from Flyway/PostgreSQL; no generated-source bypass is used. The Lambda job installs and probes `/usr/bin/ffmpeg` so its default invalid-media integration test runs. The existing POM exclusion of `slow,pipeline` is retained. Matrix failures do not cancel the other module, reports are retained as artifacts for seven days, and Python report summaries reject missing/empty, malformed, failed, or unexpectedly skipped test runs. The report checker has four regression tests.
+
+Java CI execution is pending on its implementation PR. This JVM tier does not deploy/build a native Lambda or verify PowerShell/browser media delivery. The PR template records task/slice, compatibility, stack order, commands actually run, failed/skipped checks, and outstanding local reproduction. Deployed-native E2E remains SA-022/SA-023's later tier.
 
 ## Key files
 

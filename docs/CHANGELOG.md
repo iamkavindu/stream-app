@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-10-11 — SA-023 slice 2: Java integration CI and explicit test evidence
+
+**Summary:** Automate backend and Lambda JVM integration checks and prevent empty or unexpectedly skipped suites from appearing green.
+
+**Changed**
+
+- `.github/workflows/java-ci.yml` — Java 25 module matrix, Docker prerequisite, fresh Maven builds/codegen, FFmpeg on the Lambda runner, failure-independent jobs, read-only permissions, pinned actions, and seven-day Surefire artifacts
+- `scripts/ci/summarize-surefire.py` and regression tests — aggregate XML reports, reject missing/empty/malformed/failed/skipped runs, and publish test counts plus excluded tiers in the job summary
+- Project/backlog — record PR #10 merge, new JVM gate, and remaining native/browser/PowerShell acceptance
+
+**Validation:** Four report-checker regression tests, workflow YAML/matrix/action-input inspection, and diff checks pass here. GitHub Java execution is pending; this workspace lacks Java 25 and Docker. Existing POM tag exclusions remain explicit; no application, dependency, wrapper, or lockfile changes are included.
+
+---
+
 ## 2026-10-11 — SA-023 slice 1: frontend CI and review evidence
 
 **Summary:** Run repeatable frontend checks on pull requests and capture validation scope before review.
