@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-10-11 — SA-019 slice 1: prevent stale playback and polling responses
+
+**Summary:** Keep selection and library state consistent under slow responses, route unmount, and failed polling.
+
+**Changed**
+
+- Stream playback composable — invalidate previous selection requests; ignore late URL/list callbacks after disposal; share in-flight list requests; schedule non-overlapping polls with capped error backoff
+- Library reconciliation — clear removed selections and non-ready playback, and load a selected processing video when it becomes ready
+- Deferred-response/fake-timer tests — stale successes/errors/loading, status changes, unmount, slow fetches, and backoff/recovery
+- Project/backlog — document the behavior, remaining access-expiry integration, and ready-for-review PR workflow
+
+**Validation:** Full frontend Vitest suite and production type-checked build pass. No API/schema/dependency changes; lockfiles, wrappers, and generated output are excluded. This slice does not verify actual media access or native Lambda delivery.
+
+---
+
 ## 2026-10-11 — SA-006 slice 1: explicit queue delivery and dead-letter provisioning
 
 **Summary:** Configure bounded retries for all three message queues, including existing resources, and guard the native deployment against unsafe delivery settings.

@@ -1,15 +1,12 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { getSignedStreamUrl, listVideos } from '@/features/stream/api/streamApi'
 import type { VideoRecord } from '@/features/stream/types'
-import {
-  isInProgress,
-  isPlayable,
-  playerStatusMessage,
-} from '@/features/stream/types'
+import { isInProgress, isPlayable, playerStatusMessage } from '@/features/stream/types'
 import { ApiError } from '@/shared/api/apiError'
 import { getErrorMessage } from '@/shared/api/apiError'
 
 export const STREAM_POLL_INTERVAL_MS = 4000
+export const STREAM_POLL_MAX_INTERVAL_MS = 32000
 
 export function useStreamPlayback() {
   const videos = ref<VideoRecord[]>([])
@@ -21,56 +18,96 @@ export function useStreamPlayback() {
   const playerLoading = ref(false)
   const playerError = ref<string | null>(null)
 
-  let pollTimer: ReturnType<typeof setInterval> | null = null
+  let pollTimer: ReturnType<typeof setTimeout> | null = null
+  let disposed = false
+  let selectionVersion = 0
+  let consecutiveListFailures = 0
+  let listRequest: Promise<void> | null = null
 
   const shouldPoll = computed(() => videos.value.some((video) => isInProgress(video.status)))
 
   function stopPolling(): void {
-    if (pollTimer) {
-      clearInterval(pollTimer)
+    if (pollTimer !== null) {
+      clearTimeout(pollTimer)
       pollTimer = null
     }
   }
 
-  function syncPolling(): void {
-    if (shouldPoll.value) {
-      if (!pollTimer) {
-        pollTimer = setInterval(() => {
-          void loadVideos({ silent: true })
-        }, STREAM_POLL_INTERVAL_MS)
-      }
-    } else {
-      stopPolling()
-    }
+  function schedulePolling(): void {
+    stopPolling()
+    if (disposed || !shouldPoll.value) return
+    const delay = Math.min(
+      STREAM_POLL_INTERVAL_MS * 2 ** consecutiveListFailures,
+      STREAM_POLL_MAX_INTERVAL_MS,
+    )
+    pollTimer = setTimeout(() => {
+      pollTimer = null
+      void loadVideos({ silent: true })
+    }, delay)
   }
 
-  async function loadVideos(options: { silent?: boolean } = {}): Promise<void> {
-    if (!options.silent) {
-      listLoading.value = true
-    }
+  function clearSelection(): void {
+    selectionVersion++
+    selectedUploadId.value = null
+    manifestUrl.value = null
+    playerError.value = null
+    playerLoading.value = false
+  }
+
+  function loadVideos(options: { silent?: boolean } = {}): Promise<void> {
+    if (disposed) return Promise.resolve()
+    // Refresh and polling share one request; slow responses cannot overlap the next poll.
+    if (listRequest) return listRequest
+    stopPolling()
+    if (!options.silent) listLoading.value = true
     listError.value = null
 
-    try {
-      videos.value = await listVideos()
-      syncPolling()
+    listRequest = (async () => {
+      try {
+        const response = await listVideos()
+        if (disposed) return
+        const previousSelected = videos.value.find(
+          (video) => video.uploadId === selectedUploadId.value,
+        )
+        videos.value = response
+        consecutiveListFailures = 0
 
-      const selected = videos.value.find((video) => video.uploadId === selectedUploadId.value)
-      if (selected && isPlayable(selected.status) && !manifestUrl.value && !playerLoading.value) {
-        await selectVideo(selected)
+        if (selectedUploadId.value !== null) {
+          const selected = response.find((video) => video.uploadId === selectedUploadId.value)
+          if (!selected) {
+            clearSelection()
+          } else if (!isPlayable(selected.status)) {
+            void selectVideo(selected)
+          } else if (
+            !manifestUrl.value &&
+            !playerLoading.value &&
+            (!playerError.value || (previousSelected && !isPlayable(previousSelected.status)))
+          ) {
+            void selectVideo(selected)
+          }
+        }
+      } catch (error) {
+        if (disposed) return
+        listError.value = getErrorMessage(error)
+        consecutiveListFailures = Math.min(consecutiveListFailures + 1, 3)
+      } finally {
+        listRequest = null
+        if (!disposed) {
+          listLoading.value = false
+          schedulePolling()
+        }
       }
-    } catch (error) {
-      listError.value = getErrorMessage(error)
-    } finally {
-      if (!options.silent) {
-        listLoading.value = false
-      }
-    }
+    })()
+    return listRequest
   }
 
   async function selectVideo(video: VideoRecord): Promise<void> {
+    if (disposed) return
+    const version = ++selectionVersion
     selectedUploadId.value = video.uploadId
     manifestUrl.value = null
     playerError.value = null
+    playerLoading.value = false
 
     if (!isPlayable(video.status)) {
       playerError.value = playerStatusMessage(video.status)
@@ -78,22 +115,24 @@ export function useStreamPlayback() {
     }
 
     playerLoading.value = true
-
     try {
       const response = await getSignedStreamUrl(video.uploadId)
-      manifestUrl.value = response.signedUrl
+      if (!disposed && version === selectionVersion) manifestUrl.value = response.signedUrl
     } catch (error) {
-      playerError.value = formatStreamApiError(error)
+      if (!disposed && version === selectionVersion) playerError.value = formatStreamApiError(error)
     } finally {
-      playerLoading.value = false
+      if (!disposed && version === selectionVersion) playerLoading.value = false
     }
   }
 
   onMounted(() => {
     void loadVideos()
   })
-
-  onUnmounted(stopPolling)
+  onUnmounted(() => {
+    disposed = true
+    selectionVersion++
+    stopPolling()
+  })
 
   return {
     videos,
