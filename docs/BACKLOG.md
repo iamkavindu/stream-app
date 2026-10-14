@@ -107,7 +107,7 @@ GitHub access is connected. PRs #1–#8 are merged; local verification was confi
 
 | SA-007 / slice 1 | `fix/sa-007-hls-delivery` | Merged in PR #12; user confirmed local application works | 80 backend and 20 Lambda tests pass without skips; frontend CI passes. Explicit local generated-object read policy, range CORS, output MIME types, and Floci HTTP regressions. Browser hls.js/native Safari playback and seeking require local acceptance; private expiry/retry remains a later slice. |
 
-| SA-008 / slice 1 | `feat/sa-008-attempt-result-contract` | Implementation complete; hosted CI pending | Forward identity migration, version 2 worker result, atomic stale/legacy-result guard. Retry/history/stage/failure/artifact contracts remain later slices. Backend-first rollout; deployed-native result serialization requires local acceptance. |
+| SA-008 / slice 1 | `feat/sa-008-attempt-result-contract` | PR #13 ready for review; hosted CI passed | 84 backend and 21 Lambda tests pass without skips; frontend CI passes. Forward identity migration, version 2 worker result, atomic stale/legacy-result guard. Retry/history/stage/failure/artifact contracts remain later slices. Backend-first rollout; deployed-native result serialization requires local acceptance. |
 
 SA-006 is partial until PowerShell parity and deployed native retry exhaustion are verified; pinned-emulator redrive/replay passed. A DLQ does not settle the database status; reconciliation remains SA-015. This slice does not add lifecycle-aware bulk replay.
 

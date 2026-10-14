@@ -251,6 +251,8 @@ Upload events arrive SNS-wrapped (S3 `ObjectCreated` fan-out from `video-upload-
 
 SA-008 slice 1 adds `active_attempt_id` through forward migration V2, backfilled to `upload_id` for existing rows. New registrations use that same initial-attempt convention. The Lambda publishes `{uploadId, status, attemptId, schemaVersion: 2}` with `attemptId = uploadId` for S3 ObjectCreated jobs. Backend settlement atomically requires the matching active attempt and an active status; stale results cannot change status or activity. Legacy messages (no attempt ID, absent version or version 1) can settle only the initial attempt. Version 2 without an attempt ID, an attempt ID without version 2, and unsupported versions are logged/acknowledged without mutation, following the current malformed-message policy.
 
+PR #13 hosted CI passed 84 backend and 21 Lambda tests without failures/errors/skips, plus frontend tests/build, including V1-to-V2 existing-data migration and shared result-contract verification. Native result serialization still requires local acceptance.
+
 Deploy the migrated backend **before** the new worker. Do not roll back the backend while version 2 messages are in flight. No processing retry endpoint or new-attempt dispatcher is introduced here: S3 notifications still represent only the initial attempt. Attempt history/stage/failure metadata, durable retry dispatch, attempt-scoped artifacts and worker leases remain later SA-008/SA-009 slices. `FAILED` also covers stale-upload cleanup; results cannot revive terminal rows. SHA-256 uniqueness remains unchanged, including failed rows, until the recovery policy is implemented.
 
 ## Domain model

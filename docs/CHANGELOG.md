@@ -12,7 +12,7 @@
 - PostgreSQL regressions cover migration preservation, early/duplicate/conflicting results, stale/legacy results after identity changes, and invalid versions
 - Documentation records backend-first rollout, remaining lifecycle work, PR #12 merge, and user-confirmed local application operation
 
-**Validation:** Scoped diff checks pass; hosted CI pending. Native producer serialization/deployment needs local acceptance after automated checks. The user's SA-007 application confirmation does not separately establish Safari or access-expiry scenarios.
+**Validation:** Hosted PR #13 CI passed 84 backend and 21 Lambda tests with zero failures/errors/skips, including the V1-to-V2 existing-data migration and shared producer/consumer contract. Frontend CI tests/build and scoped diff checks passed. Native producer serialization/deployment needs local acceptance after automated checks. The user's SA-007 application confirmation does not separately establish Safari or access-expiry scenarios.
 
 ---
 
