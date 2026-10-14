@@ -105,6 +105,21 @@ class ProcessingAttemptHistoryIntegrationTest {
     }
 
     @Test
+    void inconsistentPointerCannotUpdateAnotherVideosHistory() {
+        var uploadId = create();
+        var otherId = create();
+        var otherHistory = repository.findAttempts(otherId);
+        dsl.update(VIDEOS).set(VIDEOS.ACTIVE_ATTEMPT_ID, otherId)
+                .where(VIDEOS.UPLOAD_ID.eq(uploadId)).execute();
+        assertThatThrownBy(() -> repository.completeTranscode(uploadId, otherId, VideoStatus.PLAY_READY))
+                .isInstanceOf(IllegalStateException.class);
+        assertThat(repository.findByUploadId(uploadId).orElseThrow().status()).isEqualTo(VideoStatus.AWAITING_UPLOAD);
+        assertThat(repository.findAttempts(otherId)).isEqualTo(otherHistory);
+        dsl.update(VIDEOS).set(VIDEOS.ACTIVE_ATTEMPT_ID, uploadId)
+                .where(VIDEOS.UPLOAD_ID.eq(uploadId)).execute();
+    }
+
+    @Test
     void invalidFailureMetadataCannotChangeVideoOrLedger() {
         var uploadId = create();
         var before = repository.findAttempts(uploadId);

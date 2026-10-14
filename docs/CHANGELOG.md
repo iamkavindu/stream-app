@@ -7,7 +7,7 @@
 **Changed**
 
 - Flyway V3 imports existing state without fabricated event timestamps; new registrations create a history row transactionally
-- Repository transitions and upload expiry atomically update video/history; duplicate/stale/conflicting events preserve prior observations
+- Repository transitions and upload expiry atomically update video/history with same-video ownership guards; duplicate/stale/conflicting events preserve prior observations
 - Read-only attempts API returns active identity, stage, known timestamps, failure details and imported-state flag
 - Version 2 worker results add optional bounded failure metadata; FFmpeg exits carry their code without claiming an invalid-media diagnosis
 - PostgreSQL/API/producer-consumer regressions and documentation record PR #13 merge and confirmed local testing

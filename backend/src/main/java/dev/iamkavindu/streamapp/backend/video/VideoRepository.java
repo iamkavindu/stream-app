@@ -110,9 +110,10 @@ public class VideoRepository {
             requireAttemptUpdate(dsl.update(PROCESSING_ATTEMPTS)
                     .set(PROCESSING_ATTEMPTS.STAGE, "UPLOAD_OBSERVED")
                     .set(PROCESSING_ATTEMPTS.UPLOAD_OBSERVED_AT, now)
-                    .where(PROCESSING_ATTEMPTS.ATTEMPT_ID.eq(attemptId)).execute());
+                    .where(PROCESSING_ATTEMPTS.ATTEMPT_ID.eq(attemptId))
+                    .and(PROCESSING_ATTEMPTS.UPLOAD_ID.eq(uploadId)).execute());
         } else if (newStatus == VideoStatus.PLAY_READY || newStatus == VideoStatus.FAILED) {
-            settleAttempt(attemptId, newStatus, now, null, null);
+            settleAttempt(uploadId, attemptId, newStatus, now, null, null);
         }
         return true;
     }
@@ -154,11 +155,11 @@ public class VideoRepository {
         if (updated == 0) {
             return false;
         }
-        settleAttempt(attemptId, terminalStatus, now, failureCode, failureDetail);
+        settleAttempt(uploadId, attemptId, terminalStatus, now, failureCode, failureDetail);
         return true;
     }
 
-    private void settleAttempt(UUID attemptId, VideoStatus status, OffsetDateTime now,
+    private void settleAttempt(UUID uploadId, UUID attemptId, VideoStatus status, OffsetDateTime now,
             String failureCode, String failureDetail) {
         requireAttemptUpdate(dsl.update(PROCESSING_ATTEMPTS)
                 .set(PROCESSING_ATTEMPTS.STAGE, status == VideoStatus.PLAY_READY ? "SUCCEEDED" : "FAILED")
@@ -166,7 +167,8 @@ public class VideoRepository {
                 .set(PROCESSING_ATTEMPTS.FAILURE_CODE, status == VideoStatus.FAILED
                         ? (failureCode == null ? "TRANSCODE_FAILED" : failureCode) : null)
                 .set(PROCESSING_ATTEMPTS.FAILURE_DETAIL, status == VideoStatus.FAILED ? failureDetail : null)
-                .where(PROCESSING_ATTEMPTS.ATTEMPT_ID.eq(attemptId)).execute());
+                .where(PROCESSING_ATTEMPTS.ATTEMPT_ID.eq(attemptId))
+                .and(PROCESSING_ATTEMPTS.UPLOAD_ID.eq(uploadId)).execute());
     }
 
     private void requireAttemptUpdate(int updated) {
@@ -187,14 +189,15 @@ public class VideoRepository {
                 .set(VIDEOS.UPDATED_AT, now)
                 .where(VIDEOS.STATUS.eq(VideoStatus.AWAITING_UPLOAD.name()))
                 .and(VIDEOS.UPDATED_AT.lt(cutoff))
-                .returning(VIDEOS.ACTIVE_ATTEMPT_ID).fetch();
+                .returning(VIDEOS.ACTIVE_ATTEMPT_ID, VIDEOS.UPLOAD_ID).fetch();
         for (var video : expired) {
             requireAttemptUpdate(dsl.update(PROCESSING_ATTEMPTS)
                     .set(PROCESSING_ATTEMPTS.STAGE, "UPLOAD_EXPIRED")
                     .set(PROCESSING_ATTEMPTS.COMPLETED_AT, now)
                     .set(PROCESSING_ATTEMPTS.FAILURE_CODE, "UPLOAD_EXPIRED")
                     .set(PROCESSING_ATTEMPTS.FAILURE_DETAIL, "Upload session exceeded its inactivity limit.")
-                    .where(PROCESSING_ATTEMPTS.ATTEMPT_ID.eq(video.getActiveAttemptId())).execute());
+                    .where(PROCESSING_ATTEMPTS.ATTEMPT_ID.eq(video.getActiveAttemptId()))
+                    .and(PROCESSING_ATTEMPTS.UPLOAD_ID.eq(video.getUploadId())).execute());
         }
         return expired.size();
     }
