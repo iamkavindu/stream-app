@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-10-15 — SA-008 slice 2: persisted attempt history and failure observations
+
+**Summary:** Preserve actual processing observations and distinguish upload expiry from worker-reported failure before adding retries.
+
+**Changed**
+
+- Flyway V3 imports existing state without fabricated event timestamps; new registrations create a history row transactionally
+- Repository transitions and upload expiry atomically update video/history; duplicate/stale/conflicting events preserve prior observations
+- Read-only attempts API returns active identity, stage, known timestamps, failure details and imported-state flag
+- Version 2 worker results add optional bounded failure metadata; FFmpeg exits carry their code without claiming an invalid-media diagnosis
+- PostgreSQL/API/producer-consumer regressions and documentation record PR #13 merge and confirmed local testing
+
+**Validation:** Scoped diff checks pass; hosted CI pending. Backend-first deployment and native worker serialization need local acceptance before proceeding to worker coordination/retry contracts.
+
+---
+
 ## 2026-10-15 — SA-008 slice 1: processing result identity foundation
 
 **Summary:** Tie completion settlement to the active processing attempt before introducing retry operations.

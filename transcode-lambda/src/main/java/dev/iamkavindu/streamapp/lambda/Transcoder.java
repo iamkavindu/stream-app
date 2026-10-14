@@ -131,7 +131,7 @@ public class Transcoder {
             log.info("Transcode complete for {} → s3://{}/{}", uploadId, streamBucket, playlistKey);
         } catch (FfmpegExitException e) {
             log.error("FFmpeg rejected upload {}", uploadId, e);
-            publishStatus(uploadId, VideoStatus.FAILED);
+            publishStatus(uploadId, VideoStatus.FAILED, "FFMPEG_EXIT", e.getMessage());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("Transcode interrupted for upload " + uploadId, e);
@@ -146,6 +146,10 @@ public class Transcoder {
     }
 
     private void publishStatus(UUID uploadId, VideoStatus status) {
+        publishStatus(uploadId, status, null, null);
+    }
+
+    private void publishStatus(UUID uploadId, VideoStatus status, String failureCode, String failureDetail) {
         try {
             if (transcodeCompleteQueueUrl == null) {
                 transcodeCompleteQueueUrl = sqsClient
@@ -154,7 +158,8 @@ public class Transcoder {
             }
             // S3 ObjectCreated jobs represent the initial attempt only. Future retries need
             // an explicit job contract; never infer a newer attempt from an old notification.
-            var message = objectMapper.writeValueAsString(new VideoStatusUpdateRecord(uploadId, status, uploadId, 2));
+            var message = objectMapper.writeValueAsString(
+                    new VideoStatusUpdateRecord(uploadId, status, uploadId, 2, failureCode, failureDetail));
             var queueUrl = transcodeCompleteQueueUrl;
             sqsClient.sendMessage(req -> req.queueUrl(queueUrl).messageBody(message));
         } catch (Exception e) {

@@ -13,6 +13,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static dev.iamkavindu.streamapp.backend.jooq.tables.Videos.VIDEOS;
+import static dev.iamkavindu.streamapp.backend.jooq.tables.ProcessingAttempts.PROCESSING_ATTEMPTS;
 
 @IntegrationTest
 @Transactional
@@ -49,6 +50,13 @@ class VideoServiceListenerIntegrationTest {
         var activeAttempt = UUID.randomUUID();
         videoRepository.createPendingUploadEntry(uploadId, "demo.mp4", TestData.uniqueShaBytes());
         // Model a future retry without adding a public retry operation in this slice.
+        dsl.insertInto(PROCESSING_ATTEMPTS)
+                .set(PROCESSING_ATTEMPTS.ATTEMPT_ID, activeAttempt)
+                .set(PROCESSING_ATTEMPTS.UPLOAD_ID, uploadId)
+                .set(PROCESSING_ATTEMPTS.STAGE, "AWAITING_UPLOAD")
+                .set(PROCESSING_ATTEMPTS.CREATED_AT,
+                        java.time.OffsetDateTime.now())
+                .execute();
         dsl.update(VIDEOS).set(VIDEOS.ACTIVE_ATTEMPT_ID, activeAttempt)
                 .where(VIDEOS.UPLOAD_ID.eq(uploadId)).execute();
         var before = videoRepository.findByUploadId(uploadId).orElseThrow();

@@ -10,10 +10,16 @@ public record VideoStatusUpdateRecord(
         UUID uploadId,
         VideoStatus status,
         UUID attemptId,
-        Integer schemaVersion
+        Integer schemaVersion,
+        String failureCode,
+        String failureDetail
 ) {
     public VideoStatusUpdateRecord(UUID uploadId, VideoStatus status) {
-        this(uploadId, status, null, null);
+        this(uploadId, status, null, null, null, null);
+    }
+
+    public VideoStatusUpdateRecord(UUID uploadId, VideoStatus status, UUID attemptId, Integer schemaVersion) {
+        this(uploadId, status, attemptId, schemaVersion, null, null);
     }
 
     public boolean isLegacy() {
@@ -22,5 +28,11 @@ public record VideoStatusUpdateRecord(
 
     public boolean isAttemptResult() {
         return attemptId != null && Integer.valueOf(2).equals(schemaVersion);
+    }
+
+    public boolean hasValidFailureMetadata() {
+        return (status == VideoStatus.FAILED || (failureCode == null && failureDetail == null))
+                && (failureCode == null || failureCode.matches("[A-Z][A-Z0-9_]{0,63}"))
+                && (failureDetail == null || failureDetail.length() <= 512);
     }
 }

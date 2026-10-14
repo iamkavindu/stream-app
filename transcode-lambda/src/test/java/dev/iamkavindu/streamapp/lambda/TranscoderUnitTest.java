@@ -95,7 +95,8 @@ class TranscoderUnitTest {
         for (var status : new String[] {"PLAY_READY", "FAILED"}) {
             workerFailure = status.equals("FAILED") ? new Transcoder.FfmpegExitException(1) : null;
             transcoder.transcodeVideo().accept(payload);
-            var expected = MessagingFixtures.loadTemplate("messaging/transcode-complete-v2.json")
+            var expected = MessagingFixtures.loadTemplate(status.equals("FAILED")
+                    ? "messaging/transcode-complete-failed-v2.json" : "messaging/transcode-complete-v2.json")
                     .replace("{{uploadId}}", uploadId.toString())
                     .replace("{{attemptId}}", uploadId.toString())
                     .replace("{{status}}", status);

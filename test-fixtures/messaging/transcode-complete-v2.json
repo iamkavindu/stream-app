@@ -2,5 +2,7 @@
   "uploadId": "{{uploadId}}",
   "status": "{{status}}",
   "attemptId": "{{attemptId}}",
-  "schemaVersion": 2
+  "schemaVersion": 2,
+  "failureCode": null,
+  "failureDetail": null
 }
