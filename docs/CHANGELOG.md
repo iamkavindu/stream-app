@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-10-15 — SA-008 slice 1: processing result identity foundation
+
+**Summary:** Tie completion settlement to the active processing attempt before introducing retry operations.
+
+**Changed**
+
+- Forward Flyway V2 migration backfills active attempt identity without altering existing video IDs or states
+- Backend repository/listener accepts version 2 results only for the matching active attempt; legacy results are limited to the initial attempt
+- Lambda publishes explicit version 2 initial-attempt results; shared fixture covers the producer/consumer contract
+- PostgreSQL regressions cover migration preservation, early/duplicate/conflicting results, stale/legacy results after identity changes, and invalid versions
+- Documentation records backend-first rollout, remaining lifecycle work, PR #12 merge, and user-confirmed local application operation
+
+**Validation:** Scoped diff checks pass; hosted CI pending. Native producer serialization/deployment needs local acceptance after automated checks. The user's SA-007 application confirmation does not separately establish Safari or access-expiry scenarios.
+
+---
+
 ## 2026-10-14 — SA-007 slice 1: explicit local HLS delivery
 
 **Summary:** Make relative HLS media requests deliberate in the local demo and publish browser media content types.

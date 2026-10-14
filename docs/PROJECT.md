@@ -195,7 +195,9 @@ FFmpeg flags (VOD fMP4 HLS, 4 s segments, single combined media file):
 ```json
 {
   "uploadId": "550e8400-e29b-41d4-a716-446655440000",
-  "status": "PLAY_READY"
+  "status": "PLAY_READY",
+  "attemptId": "550e8400-e29b-41d4-a716-446655440000",
+  "schemaVersion": 2
 }
 ```
 
@@ -203,7 +205,7 @@ Use `"status": "FAILED"` for a nonzero FFmpeg exit only after that result has be
 
 **Result publication and redelivery (SA-004):** Queue lookup, serialization, and send failures propagate out of the function. A failed `PLAY_READY` send is never converted to `FAILED`. A nonzero FFmpeg exit publishes `FAILED`; failure to publish it also fails the invocation. Source download, output upload, temporary-file/output-artifact problems, and inability to start FFmpeg fail the invocation without publishing a terminal result. Interrupted workers restore the interrupt flag. The existing best-effort temporary-directory cleanup runs in `finally` on every path, including publication failure; stricter cleanup/process bounds remain SA-012.
 
-The current nonzero FFmpeg exit policy is retained; exit code alone does not identify every failure cause. More detailed media validation/failure classification remains SA-011. Redelivery can redo the transcode and overwrite output; attempt identity/idempotency remain SA-008/SA-009. The consumer throws for the whole batch, so earlier successful records may also be redelivered. SA-006 slice 1 configures five receives before DLQ delivery, a 1,800-second Lambda source visibility window, and explicit retention; the user verified repeat provisioning, payload preservation, five-receive exhaustion, and DLQ replay on pinned Floci. Native delivery verification remains pending. Deployed/native Lambda redelivery still needs local acceptance verification.
+The current nonzero FFmpeg exit policy is retained; exit code alone does not identify every failure cause. More detailed media validation/failure classification remains SA-011. Redelivery can redo the initial transcode and overwrite output; result identity is introduced in SA-008 slice 1, but worker ownership/output idempotency remain SA-008/SA-009. The consumer throws for the whole batch, so earlier successful records may also be redelivered. SA-006 slice 1 configures five receives before DLQ delivery, a 1,800-second Lambda source visibility window, and explicit retention; the user verified repeat provisioning, payload preservation, five-receive exhaustion, and DLQ replay on pinned Floci. Native delivery verification remains pending. Deployed/native Lambda redelivery still needs local acceptance verification.
 
 Example stream-bucket layout after transcode:
 
@@ -232,7 +234,7 @@ A presigned URL covers **one** S3 object. HLS.js loads `index.m3u8` first, then 
 
 The backend still returns a 15-minute presigned GET for `{uploadId}/index.m3u8`. The local read policy also permits unsigned generated-object reads, so URL expiry is deliberately **not** an access boundary in this demo. It grants no list/write permissions or access to the upload bucket. `streamapp.local-hls.public-read-enabled` defaults to false and is explicitly enabled in `application-dev.properties`; disabling it stops policy updates but does not revoke an already installed policy. Remove that policy explicitly when switching an existing bucket to private delivery. Keep real AWS buckets private and use CloudFront signed cookies (or a proxy) for complete HLS access; do not deploy the local dev settings there.
 
-The worker writes `application/vnd.apple.mpegurl` for playlists and `video/mp4` for media. Redeploy the Lambda and transcode a new video to obtain the new metadata; existing objects are not rewritten. The default backend suite exercises the actual dev initializer and pinned Floci over HTTP: stored policy/CORS, relative unsigned media requests, exact `206` byte ranges, HEAD, preflight, and missing output. PR #12 hosted CI passed all 80 backend and 20 Lambda tests with zero skips, plus frontend tests/build. These synthetic bytes verify transport, not decoding or seeking. Browser/native acceptance steps are in [hls-delivery.md](./hls-delivery.md); policy enforcement outside the pinned emulator and private-access expiry remain unverified.
+The worker writes `application/vnd.apple.mpegurl` for playlists and `video/mp4` for media. Redeploy the Lambda and transcode a new video to obtain the new metadata; existing objects are not rewritten. The default backend suite exercises the actual dev initializer and pinned Floci over HTTP: stored policy/CORS, relative unsigned media requests, exact `206` byte ranges, HEAD, preflight, and missing output. PR #12 hosted CI passed all 80 backend and 20 Lambda tests with zero skips, plus frontend tests/build. These synthetic bytes verify transport, not decoding or seeking. The user confirmed the application works after Linux native deployment and merged PR #12 on 2026-10-15. Specific Safari and expired-access scenarios were not separately reported. Browser/native acceptance steps are in [hls-delivery.md](./hls-delivery.md); policy enforcement outside the pinned emulator and private-access expiry remain unverified.
 
 Buckets, CORS, and the opt-in local HLS read policy are applied by the backend on startup (`ResourceInitialize`, `dev` profile). SNS topic, SQS queues, and S3→SNS event notification are provisioned by `docker/infra/aws/init-aws-resources.sh` (Compose `aws-init`) or `init-aws-resources.ps1` (Windows host).
 
@@ -247,15 +249,18 @@ Upload events arrive SNS-wrapped (S3 `ObjectCreated` fan-out from `video-upload-
 
 **Completion delivery semantics (SA-003):** The repository uses one conditional update across both active states; a later upload event cannot regress a terminal row. Identical terminal results are acknowledged as duplicates; conflicting terminal results retain the first committed terminal state and are logged. Unknown upload IDs and invalid JSON, missing fields, or non-terminal statuses are logged and acknowledged without mutation. Database failures propagate so `ON_SUCCESS` does not acknowledge failed handling. Duplicate/conflicting results do not change `updated_at`.
 
-This contract applies to the current single-attempt model. `FAILED` also covers stale-upload cleanup, so a completion cannot revive a row already failed by cleanup. Processing retries and distinguishing delayed old-attempt results require SA-008's attempt identity before they are introduced.
+SA-008 slice 1 adds `active_attempt_id` through forward migration V2, backfilled to `upload_id` for existing rows. New registrations use that same initial-attempt convention. The Lambda publishes `{uploadId, status, attemptId, schemaVersion: 2}` with `attemptId = uploadId` for S3 ObjectCreated jobs. Backend settlement atomically requires the matching active attempt and an active status; stale results cannot change status or activity. Legacy messages (no attempt ID, absent version or version 1) can settle only the initial attempt. Version 2 without an attempt ID, an attempt ID without version 2, and unsupported versions are logged/acknowledged without mutation, following the current malformed-message policy.
+
+Deploy the migrated backend **before** the new worker. Do not roll back the backend while version 2 messages are in flight. No processing retry endpoint or new-attempt dispatcher is introduced here: S3 notifications still represent only the initial attempt. Attempt history/stage/failure metadata, durable retry dispatch, attempt-scoped artifacts and worker leases remain later SA-008/SA-009 slices. `FAILED` also covers stale-upload cleanup; results cannot revive terminal rows. SHA-256 uniqueness remains unchanged, including failed rows, until the recovery policy is implemented.
 
 ## Domain model
 
-Table: `videos` (Flyway `V1__create_videos.sql`)
+Table: `videos` (Flyway V1 plus forward `V2__add_active_attempt_identity.sql`)
 
 | Column | Type | Notes |
 |--------|------|-------|
-| `upload_id` | UUID PK | Per-upload identifier |
+| `upload_id` | UUID PK | Public video identifier |
+| `active_attempt_id` | UUID NOT NULL | V2 migration; initial attempt equals upload ID |
 | `status` | VARCHAR(50) | `VideoStatus` enum value (see below) |
 | `file_name` | VARCHAR(255) | Original filename |
 | `sha256_hash` | BYTEA | Unique index — deduplication |

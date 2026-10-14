@@ -152,7 +152,9 @@ public class Transcoder {
                         .getQueueUrl(req -> req.queueName(transcodeCompleteQueueName))
                         .queueUrl();
             }
-            var message = objectMapper.writeValueAsString(new VideoStatusUpdateRecord(uploadId, status));
+            // S3 ObjectCreated jobs represent the initial attempt only. Future retries need
+            // an explicit job contract; never infer a newer attempt from an old notification.
+            var message = objectMapper.writeValueAsString(new VideoStatusUpdateRecord(uploadId, status, uploadId, 2));
             var queueUrl = transcodeCompleteQueueUrl;
             sqsClient.sendMessage(req -> req.queueUrl(queueUrl).messageBody(message));
         } catch (Exception e) {

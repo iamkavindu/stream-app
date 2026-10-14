@@ -1,0 +1,6 @@
+{
+  "uploadId": "{{uploadId}}",
+  "status": "{{status}}",
+  "attemptId": "{{attemptId}}",
+  "schemaVersion": 2
+}
