@@ -271,7 +271,7 @@ Video and history writes share a transaction and require the attempt to belong t
 
 Version 2 result messages gain optional `failureCode` (uppercase identifier, max 64 characters) and `failureDetail` (max 512 characters). New workers report `FFMPEG_EXIT` with the exit status; this does not claim every nonzero exit is invalid media. Upload expiry uses `UPLOAD_EXPIRED`. Success messages carry no failure reason. Invalid failure metadata is rejected without mutation. No worker-start percentage, queue dispatch time, artifact reference or lease is claimed yet.
 
-Rollout: restart/migrate the backend first, then rebuild/redeploy the native Lambda. Existing V2 workers with no reason fields remain supported. Native serialization of the additional fields needs local acceptance; JVM CI covers the producer/consumer fixture and actual PostgreSQL persistence.
+Rollout: restart/migrate the backend first, then rebuild/redeploy the native Lambda. Existing V2 workers with no reason fields remain supported. PR #14 hosted CI passed 90 backend and 21 Lambda tests with no failures/errors/skips, plus frontend tests/build. Native serialization of the additional fields needs local acceptance; JVM CI covers the producer/consumer fixture and actual PostgreSQL persistence.
 
 ## Domain model
 

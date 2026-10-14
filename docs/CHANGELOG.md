@@ -12,7 +12,7 @@
 - Version 2 worker results add optional bounded failure metadata; FFmpeg exits carry their code without claiming an invalid-media diagnosis
 - PostgreSQL/API/producer-consumer regressions and documentation record PR #13 merge and confirmed local testing
 
-**Validation:** Scoped diff checks pass; hosted CI pending. Backend-first deployment and native worker serialization need local acceptance before proceeding to worker coordination/retry contracts.
+**Validation:** PR #14 hosted CI passed 90 backend and 21 Lambda tests with zero failures/errors/skips; frontend tests/build passed. Existing-data migration, same-video ownership, transactional rollback, API and producer/consumer regressions passed. Scoped diff checks pass. Backend-first deployment and native worker serialization need local acceptance before proceeding to worker coordination/retry contracts.
 
 ---
 
