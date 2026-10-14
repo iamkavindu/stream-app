@@ -8,5 +8,19 @@ import java.util.UUID;
  */
 public record VideoStatusUpdateRecord(
         UUID uploadId,
-        VideoStatus status
-) {}
+        VideoStatus status,
+        UUID attemptId,
+        Integer schemaVersion
+) {
+    public VideoStatusUpdateRecord(UUID uploadId, VideoStatus status) {
+        this(uploadId, status, null, null);
+    }
+
+    public boolean isLegacy() {
+        return attemptId == null && (schemaVersion == null || schemaVersion == 1);
+    }
+
+    public boolean isAttemptResult() {
+        return attemptId != null && Integer.valueOf(2).equals(schemaVersion);
+    }
+}

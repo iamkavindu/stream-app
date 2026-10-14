@@ -36,6 +36,8 @@ class VideoRepositoryIntegrationTest {
         var video = videoRepository.findByUploadId(uploadId).orElseThrow();
         assertThat(video.status()).isEqualTo(VideoStatus.AWAITING_UPLOAD);
         assertThat(video.fileName()).isEqualTo("demo.mp4");
+        assertThat(dsl.select(VIDEOS.ACTIVE_ATTEMPT_ID).from(VIDEOS)
+                .where(VIDEOS.UPLOAD_ID.eq(uploadId)).fetchOne(VIDEOS.ACTIVE_ATTEMPT_ID)).isEqualTo(uploadId);
     }
 
     @Test

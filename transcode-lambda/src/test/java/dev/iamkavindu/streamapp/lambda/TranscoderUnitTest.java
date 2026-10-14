@@ -44,6 +44,7 @@ class TranscoderUnitTest {
     private final List<String> attemptedStatuses = new ArrayList<>();
     private final List<String> deliveredStatuses = new ArrayList<>();
     private final List<Path> workDirs = new ArrayList<>();
+    private final List<String> resultMessages = new ArrayList<>();
     private int sendFailures;
     private Exception workerFailure;
     private boolean createArtifacts = true;
@@ -60,6 +61,7 @@ class TranscoderUnitTest {
             Consumer<SendMessageRequest.Builder> configure = invocation.getArgument(0);
             var builder = SendMessageRequest.builder();
             configure.accept(builder);
+            resultMessages.add(builder.build().messageBody());
             var status = mapper.readTree(builder.build().messageBody()).path("status").asText();
             attemptedStatuses.add(status);
             if (sendFailures > 0) {
@@ -84,6 +86,22 @@ class TranscoderUnitTest {
                 }
             }
         };
+    }
+
+    @Test
+    void publishesSharedVersionTwoContractForSuccessAndMediaFailure() {
+        var uploadId = MessagingFixtures.SAMPLE_UPLOAD_ID;
+        payload = MessagingFixtures.sqsLambdaEnvelope(uploadId, "demo.mp4").getBytes(StandardCharsets.UTF_8);
+        for (var status : new String[] {"PLAY_READY", "FAILED"}) {
+            workerFailure = status.equals("FAILED") ? new Transcoder.FfmpegExitException(1) : null;
+            transcoder.transcodeVideo().accept(payload);
+            var expected = MessagingFixtures.loadTemplate("messaging/transcode-complete-v2.json")
+                    .replace("{{uploadId}}", uploadId.toString())
+                    .replace("{{attemptId}}", uploadId.toString())
+                    .replace("{{status}}", status);
+            assertThat(mapper.readTree(resultMessages.getLast())).isEqualTo(mapper.readTree(expected));
+        }
+        assertWorkDirsCleaned();
     }
 
     @Test

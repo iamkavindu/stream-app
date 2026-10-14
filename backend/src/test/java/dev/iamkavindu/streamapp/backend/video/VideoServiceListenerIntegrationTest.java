@@ -4,6 +4,7 @@ import dev.iamkavindu.streamapp.backend.support.IntegrationTest;
 import dev.iamkavindu.streamapp.backend.support.MessagingFixtures;
 import dev.iamkavindu.streamapp.backend.support.TestData;
 import dev.iamkavindu.streamapp.backend.video.model.VideoStatus;
+import org.jooq.DSLContext;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
@@ -11,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static dev.iamkavindu.streamapp.backend.jooq.tables.Videos.VIDEOS;
 
 @IntegrationTest
 @Transactional
@@ -21,6 +23,66 @@ class VideoServiceListenerIntegrationTest {
 
     @Autowired
     VideoRepository videoRepository;
+
+    @Autowired
+    DSLContext dsl;
+
+    @Test
+    void versionTwoInitialResultCanArriveBeforeUploadAndCannotRegressTerminalState() {
+        for (var terminal : new VideoStatus[] {VideoStatus.PLAY_READY, VideoStatus.FAILED}) {
+            var uploadId = UUID.randomUUID();
+            videoRepository.createPendingUploadEntry(uploadId, "demo.mp4", TestData.uniqueShaBytes());
+            videoService.onTranscodeComplete(attemptResult(uploadId, uploadId, terminal));
+            var settled = videoRepository.findByUploadId(uploadId).orElseThrow();
+            assertThat(settled.status()).isEqualTo(terminal);
+            videoService.onUploadComplete(MessagingFixtures.snsNotificationEnvelope(uploadId, "demo.mp4"));
+            videoService.onTranscodeComplete(attemptResult(uploadId, uploadId, terminal));
+            videoService.onTranscodeComplete(attemptResult(uploadId, uploadId,
+                    terminal == VideoStatus.PLAY_READY ? VideoStatus.FAILED : VideoStatus.PLAY_READY));
+            assertThat(videoRepository.findByUploadId(uploadId).orElseThrow()).isEqualTo(settled);
+        }
+    }
+
+    @Test
+    void staleAndLegacyResultsCannotSettleAnotherActiveAttempt() {
+        var uploadId = UUID.randomUUID();
+        var activeAttempt = UUID.randomUUID();
+        videoRepository.createPendingUploadEntry(uploadId, "demo.mp4", TestData.uniqueShaBytes());
+        // Model a future retry without adding a public retry operation in this slice.
+        dsl.update(VIDEOS).set(VIDEOS.ACTIVE_ATTEMPT_ID, activeAttempt)
+                .where(VIDEOS.UPLOAD_ID.eq(uploadId)).execute();
+        var before = videoRepository.findByUploadId(uploadId).orElseThrow();
+        for (var terminal : new VideoStatus[] {VideoStatus.PLAY_READY, VideoStatus.FAILED}) {
+            videoService.onTranscodeComplete(attemptResult(uploadId, uploadId, terminal));
+            videoService.onTranscodeComplete(MessagingFixtures.transcodeCompleteMessage(uploadId, terminal.name()));
+            assertThat(videoRepository.findByUploadId(uploadId).orElseThrow()).isEqualTo(before);
+        }
+        videoService.onTranscodeComplete(attemptResult(uploadId, activeAttempt, VideoStatus.PLAY_READY));
+        assertThat(videoRepository.findByUploadId(uploadId).orElseThrow().status()).isEqualTo(VideoStatus.PLAY_READY);
+    }
+
+    @Test
+    void incompleteAndUnsupportedVersionContractsCannotSettleInitialAttempt() {
+        var uploadId = UUID.randomUUID();
+        videoRepository.createPendingUploadEntry(uploadId, "demo.mp4", TestData.uniqueShaBytes());
+        var before = videoRepository.findByUploadId(uploadId).orElseThrow();
+        for (var fields : new String[] {
+                "\"schemaVersion\":2", "\"schemaVersion\":3", "\"schemaVersion\":0",
+                "\"attemptId\":\"" + uploadId + "\"",
+                "\"attemptId\":\"" + uploadId + "\",\"schemaVersion\":1",
+                "\"attemptId\":\"" + uploadId + "\",\"schemaVersion\":3"}) {
+            videoService.onTranscodeComplete("{\"uploadId\":\"" + uploadId
+                    + "\",\"status\":\"PLAY_READY\"," + fields + "}");
+            assertThat(videoRepository.findByUploadId(uploadId).orElseThrow()).isEqualTo(before);
+        }
+    }
+
+    private String attemptResult(UUID uploadId, UUID attemptId, VideoStatus status) {
+        return MessagingFixtures.loadTemplate("messaging/transcode-complete-v2.json")
+                .replace("{{uploadId}}", uploadId.toString())
+                .replace("{{attemptId}}", attemptId.toString())
+                .replace("{{status}}", status.name());
+    }
 
     @Test
     void onUploadComplete_transitionsAwaitingUploadToTranscoding() {

@@ -28,6 +28,7 @@ public class VideoRepository {
         var now = OffsetDateTime.now(ZoneId.systemDefault());
         dsl.insertInto(VIDEOS)
                 .set(VIDEOS.UPLOAD_ID, uploadId)
+                .set(VIDEOS.ACTIVE_ATTEMPT_ID, uploadId)
                 .set(VIDEOS.STATUS, VideoStatus.AWAITING_UPLOAD.name())
                 .set(VIDEOS.FILE_NAME, fileName)
                 .set(VIDEOS.SHA256_HASH, sha256Hex)
@@ -79,11 +80,19 @@ public class VideoRepository {
     }
 
     /**
-     * Settles the current single processing attempt even if its upload notification is delayed.
+     * Legacy results may settle only the initial attempt, whose identity equals uploadId.
      * Terminal rows are excluded atomically, so duplicate/conflicting results cannot overwrite them.
      * @return {@code true} when an active row was settled
      */
     public boolean completeTranscode(UUID uploadId, VideoStatus terminalStatus) {
+        return completeTranscode(uploadId, uploadId, terminalStatus);
+    }
+
+    /** Settles only the matching active attempt; stale results cannot mutate status or activity. */
+    public boolean completeTranscode(UUID uploadId, UUID attemptId, VideoStatus terminalStatus) {
+        if (attemptId == null) {
+            throw new IllegalArgumentException("Transcode result must identify an attempt");
+        }
         if (terminalStatus != VideoStatus.PLAY_READY && terminalStatus != VideoStatus.FAILED) {
             throw new IllegalArgumentException("Transcode result must be PLAY_READY or FAILED");
         }
@@ -92,6 +101,7 @@ public class VideoRepository {
                 .set(VIDEOS.STATUS, terminalStatus.name())
                 .set(VIDEOS.UPDATED_AT, now)
                 .where(VIDEOS.UPLOAD_ID.eq(uploadId))
+                .and(VIDEOS.ACTIVE_ATTEMPT_ID.eq(attemptId))
                 .and(VIDEOS.STATUS.in(
                         VideoStatus.AWAITING_UPLOAD.name(), VideoStatus.TRANSCODING_IN_PROGRESS.name()))
                 .execute() > 0;

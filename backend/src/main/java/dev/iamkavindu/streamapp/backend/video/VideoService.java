@@ -284,13 +284,26 @@ public class VideoService {
             return;
         }
 
-        var updated = videoRepository.completeTranscode(update.uploadId(), update.status());
+        if (!update.isLegacy() && !update.isAttemptResult()) {
+            log.warn("Ignoring transcode-complete message for {} with invalid attempt/version contract",
+                    update.uploadId());
+            return;
+        }
+
+        var updated = update.isLegacy()
+                ? videoRepository.completeTranscode(update.uploadId(), update.status())
+                : videoRepository.completeTranscode(update.uploadId(), update.attemptId(), update.status());
         if (updated) {
             log.info("Transcode complete for {} — status set to {}", update.uploadId(), update.status());
             return;
         }
 
         var current = videoRepository.findByUploadId(update.uploadId());
+        if (update.isAttemptResult()) {
+            log.debug("Attempt result for {} / {} did not settle an active matching row",
+                    update.uploadId(), update.attemptId());
+            return;
+        }
         if (current.isEmpty()) {
             log.warn("Ignoring transcode-complete message for unknown upload {}", update.uploadId());
         } else if (current.get().status() == update.status()) {
