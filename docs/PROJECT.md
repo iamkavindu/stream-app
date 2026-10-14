@@ -228,11 +228,13 @@ A presigned URL covers **one** S3 object. HLS.js loads `index.m3u8` first, then 
 | Environment | Recommended approach |
 |-------------|---------------------|
 | **Production** | CloudFront in front of `streamapp-streams` with **signed cookies** (or signed URLs) scoped to `/{uploadId}/*`, or a backend media proxy |
-| **Local dev (Floci)** | Permissive read on `streamapp-streams` prefix, or backend proxy; stream-bucket CORS (`GET`, `HEAD`) is configured for browser playback |
+| **Local dev (Floci)** | Explicit anonymous `s3:GetObject` policy for `streamapp-streams/*/index.m3u8` and `*/media.mp4`; CORS permits `GET`/`HEAD` from `http://localhost:5173` and exposes range/ETag headers |
 
-The backend currently returns a presigned GET for `{uploadId}/index.m3u8` only. Plan CloudFront signed cookies (or a proxy) before production HLS playback on a private bucket.
+The backend still returns a 15-minute presigned GET for `{uploadId}/index.m3u8`. The local read policy also permits unsigned generated-object reads, so URL expiry is deliberately **not** an access boundary in this demo. It grants no list/write permissions or access to the upload bucket. `streamapp.local-hls.public-read-enabled` defaults to false and is explicitly enabled in `application-dev.properties`; disabling it stops policy updates but does not revoke an already installed policy. Remove that policy explicitly when switching an existing bucket to private delivery. Keep real AWS buckets private and use CloudFront signed cookies (or a proxy) for complete HLS access; do not deploy the local dev settings there.
 
-Buckets and CORS are created by the backend on startup (`ResourceInitialize`, `dev` profile). SNS topic, SQS queues, and S3→SNS event notification are provisioned by `docker/infra/aws/init-aws-resources.sh` (Compose `aws-init`) or `init-aws-resources.ps1` (Windows host).
+The worker writes `application/vnd.apple.mpegurl` for playlists and `video/mp4` for media. Redeploy the Lambda and transcode a new video to obtain the new metadata; existing objects are not rewritten. The default backend suite exercises the actual dev initializer and pinned Floci over HTTP: stored policy/CORS, relative unsigned media requests, exact `206` byte ranges, HEAD, preflight, and missing output. PR #12 hosted CI passed all 80 backend and 20 Lambda tests with zero skips, plus frontend tests/build. These synthetic bytes verify transport, not decoding or seeking. Browser/native acceptance steps are in [hls-delivery.md](./hls-delivery.md); policy enforcement outside the pinned emulator and private-access expiry remain unverified.
+
+Buckets, CORS, and the opt-in local HLS read policy are applied by the backend on startup (`ResourceInitialize`, `dev` profile). SNS topic, SQS queues, and S3→SNS event notification are provisioned by `docker/infra/aws/init-aws-resources.sh` (Compose `aws-init`) or `init-aws-resources.ps1` (Windows host).
 
 **SQS listeners** (`VideoService`, `ON_SUCCESS` ack):
 
@@ -482,7 +484,7 @@ $env:AWS_ENDPOINT_URL = "http://localhost:4566"
 
 Each source queue has a matching `<source-name>-dlq`. Bootstrap reapplies delivery settings on existing queues: source retention 4 days, DLQ retention 14 days, maxReceiveCount 5, backend/completion visibility 30 seconds, and Lambda-source visibility 1,800 seconds. The deployment script retains a 300-second function timeout, enforces batch size one/window zero on new and existing mappings, and rejects a missing/wrong DLQ or insufficient visibility before deployment. See [delivery verification and replay](./queue-delivery.md). Queues are never purged/replaced during bootstrap; configured retention still expires old messages normally. DLQ arrival does not itself change the video's DB status.
 
-Buckets (`streamapp-uploads`, `streamapp-streams`) and browser CORS remain backend responsibilities (`ResourceInitialize`, `dev` profile).
+Buckets (`streamapp-uploads`, `streamapp-streams`), browser CORS, and local HLS read policy remain backend responsibilities (`ResourceInitialize`, `dev` profile).
 
 ### Backend
 
@@ -564,7 +566,7 @@ The frontend job summary states what its tier covers. The first GitHub-hosted fr
 
 `.github/workflows/java-ci.yml` adds separate backend and Lambda JVM jobs on the same events using Java 25, Docker, and the committed Maven wrappers (`sh mvnw --batch-mode --no-transfer-progress clean test`). Backend jOOQ sources are freshly generated from Flyway/PostgreSQL; no generated-source bypass is used. The Lambda job installs and probes `/usr/bin/ffmpeg` so its default invalid-media integration test runs. The existing POM exclusion of `slow,pipeline` is retained. Matrix failures do not cancel the other module, reports are retained as artifacts for seven days, and Python report summaries reject missing/empty, malformed, failed, or unexpectedly skipped test runs. The report checker has four regression tests.
 
-The first hosted Java CI run passed 76 backend and 19 Lambda tests with no failures/errors/skips; fresh backend codegen and the actual FFmpeg invalid-media test ran. Frontend CI also passed on the same PR. This JVM tier does not deploy/build a native Lambda or verify PowerShell/browser media delivery. The PR template records task/slice, compatibility, stack order, commands actually run, failed/skipped checks, and outstanding local reproduction. Deployed-native E2E remains SA-022/SA-023's later tier.
+PR #11 is merged. The first hosted Java CI run passed 76 backend and 19 Lambda tests with no failures/errors/skips; fresh backend codegen and the actual FFmpeg invalid-media test ran. Frontend CI also passed on the same PR. This JVM tier does not deploy/build a native Lambda or verify PowerShell/browser media delivery. The PR template records task/slice, compatibility, stack order, commands actually run, failed/skipped checks, and outstanding local reproduction. Deployed-native E2E remains SA-022/SA-023's later tier.
 
 ## Key files
 

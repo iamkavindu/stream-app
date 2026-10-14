@@ -4,6 +4,7 @@ import dev.iamkavindu.streamapp.lambda.aws.S3UploadEventParser;
 import dev.iamkavindu.streamapp.lambda.support.MessagingFixtures;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import software.amazon.awssdk.core.exception.SdkClientException;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
@@ -32,6 +33,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.times;
 
 class TranscoderUnitTest {
 
@@ -81,6 +84,22 @@ class TranscoderUnitTest {
                 }
             }
         };
+    }
+
+    @Test
+    void generatedObjectsHaveBrowserMediaContentTypes() {
+        transcoder.transcodeVideo().accept(payload);
+        var requests = ArgumentCaptor.forClass(PutObjectRequest.class);
+        verify(s3Client, times(2)).putObject(requests.capture(), any(Path.class));
+        assertThat(requests.getAllValues()).anySatisfy(request -> {
+            assertThat(request.key()).endsWith("/index.m3u8");
+            assertThat(request.contentType()).isEqualTo("application/vnd.apple.mpegurl");
+        }).anySatisfy(request -> {
+            assertThat(request.key()).endsWith("/media.mp4");
+            assertThat(request.contentType()).isEqualTo("video/mp4");
+        });
+        assertThat(deliveredStatuses).containsExactly("PLAY_READY");
+        assertWorkDirsCleaned();
     }
 
     @Test

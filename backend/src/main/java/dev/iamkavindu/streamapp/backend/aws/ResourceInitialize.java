@@ -2,6 +2,7 @@ package dev.iamkavindu.streamapp.backend.aws;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
@@ -22,9 +23,12 @@ public class ResourceInitialize {
     private static final String STREAM_BUCKET = "streamapp-streams";
 
     private final S3Client s3Client;
+    private final boolean localHlsPublicReadEnabled;
 
-    public ResourceInitialize(S3Client s3Client) {
+    public ResourceInitialize(S3Client s3Client,
+            @Value("${streamapp.local-hls.public-read-enabled:false}") boolean localHlsPublicReadEnabled) {
         this.s3Client = s3Client;
+        this.localHlsPublicReadEnabled = localHlsPublicReadEnabled;
     }
 
     @EventListener(ApplicationReadyEvent.class)
@@ -34,6 +38,9 @@ public class ResourceInitialize {
         createBucketIfMissing(STREAM_BUCKET);
         configureUploadBucketCors();
         configureStreamBucketCors();
+        if (localHlsPublicReadEnabled) {
+            configureLocalStreamReadPolicy();
+        }
     }
 
     private void createBucketIfMissing(String bucketName) {
@@ -67,6 +74,7 @@ public class ResourceInitialize {
                 .allowedHeaders("*")
                 .allowedMethods("GET", "HEAD")
                 .allowedOrigins("http://localhost:5173")
+                .exposeHeaders("Accept-Ranges", "Content-Range", "ETag")
                 .maxAgeSeconds(3600)
                 .build();
 
@@ -78,5 +86,25 @@ public class ResourceInitialize {
                 .bucket(STREAM_BUCKET)
                 .corsConfiguration(corsConfig)
                 .build());
+    }
+
+    private void configureLocalStreamReadPolicy() {
+        // Local demo access only: the playlist's relative media URL has no presign query.
+        var policy = """
+                {
+                  "Version": "2012-10-17",
+                  "Statement": [{
+                    "Sid": "LocalHlsRead",
+                    "Effect": "Allow",
+                    "Principal": "*",
+                    "Action": "s3:GetObject",
+                    "Resource": [
+                      "arn:aws:s3:::%s/*/index.m3u8",
+                      "arn:aws:s3:::%s/*/media.mp4"
+                    ]
+                  }]
+                }
+                """.formatted(STREAM_BUCKET, STREAM_BUCKET);
+        s3Client.putBucketPolicy(request -> request.bucket(STREAM_BUCKET).policy(policy));
     }
 }

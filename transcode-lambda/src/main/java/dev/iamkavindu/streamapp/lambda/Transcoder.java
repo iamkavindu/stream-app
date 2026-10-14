@@ -119,10 +119,12 @@ public class Transcoder {
             var mediaKey = S3ObjectKeys.streamMediaKey(uploadId);
 
             s3Client.putObject(
-                    PutObjectRequest.builder().bucket(streamBucket).key(playlistKey).build(),
+                    PutObjectRequest.builder().bucket(streamBucket).key(playlistKey)
+                            .contentType("application/vnd.apple.mpegurl").build(),
                     localManifest);
             s3Client.putObject(
-                    PutObjectRequest.builder().bucket(streamBucket).key(mediaKey).build(),
+                    PutObjectRequest.builder().bucket(streamBucket).key(mediaKey)
+                            .contentType("video/mp4").build(),
                     localMediaFile);
 
             publishStatus(uploadId, VideoStatus.PLAY_READY);
