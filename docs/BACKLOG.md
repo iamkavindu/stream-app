@@ -105,7 +105,7 @@ GitHub access is connected. PRs #1–#8 are merged; local verification was confi
 | SA-023 / slice 1 | `ci/sa-023-frontend-checks` | Merged in PR #10; GitHub CI passed | Locked install, Vitest, and production/type-check build; action revisions pinned; read-only token. Java/native/browser gates remain later slices. |
 | SA-023 / slice 2 | `ci/sa-023-java-checks` | Merged in PR #11; hosted Java/frontend checks passed | Hosted Java 25/Docker run passed 76 backend and 19 Lambda tests with zero skips, including FFmpeg invalid-media verification; report artifacts and exclusion/skip reporting passed. Native/browser/PowerShell acceptance remains separate. |
 
-| SA-007 / slice 1 | `fix/sa-007-hls-delivery` | Implementation complete; hosted CI pending | Explicit local generated-object read policy, range CORS, output MIME types, and Floci HTTP regressions. Browser hls.js/native Safari playback and seeking require local acceptance; private expiry/retry remains a later slice. |
+| SA-007 / slice 1 | `fix/sa-007-hls-delivery` | PR #12 ready for review; hosted CI passed | 80 backend and 20 Lambda tests pass without skips; frontend CI passes. Explicit local generated-object read policy, range CORS, output MIME types, and Floci HTTP regressions. Browser hls.js/native Safari playback and seeking require local acceptance; private expiry/retry remains a later slice. |
 
 SA-006 is partial until PowerShell parity and deployed native retry exhaustion are verified; pinned-emulator redrive/replay passed. A DLQ does not settle the database status; reconciliation remains SA-015. This slice does not add lifecycle-aware bulk replay.
 

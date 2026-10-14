@@ -1,6 +1,6 @@
 # Changelog
 
-## 2026-10-11 — SA-007 slice 1: explicit local HLS delivery
+## 2026-10-14 — SA-007 slice 1: explicit local HLS delivery
 
 **Summary:** Make relative HLS media requests deliberate in the local demo and publish browser media content types.
 
@@ -11,7 +11,7 @@
 - Regression tests — persisted policy/CORS, signed playlist to unsigned media resolution, exact byte ranges, HEAD/preflight, missing output, disabled policy updates, and worker output metadata
 - Project/backlog and HLS acceptance guide — record PR #11 merge, local access/expiry semantics, and remaining browser/native checks
 
-**Validation:** Diff review completed; Java 25/Docker tests will run in hosted CI. Synthetic HTTP fixtures do not prove media decoding or browser seeking. Existing objects need retranscoding for new content types.
+**Validation:** PR #12 hosted Java 25/Docker CI passed 80 backend and 20 Lambda tests with zero failures/errors/skips, including the Floci HTTP range/CORS/missing-output checks and worker MIME regression. Frontend CI tests/build also passed. Diff checks pass. Synthetic HTTP fixtures do not prove media decoding or browser seeking. Existing objects need retranscoding for new content types.
 
 ---
 
