@@ -94,13 +94,13 @@ public class Transcoder {
         UUID uploadId;
         UUID attemptId;
         String srcKey;
-        tools.jackson.databind.JsonNode command;
+        tools.jackson.databind.JsonNode commandNode;
         try {
-            command = objectMapper.readTree(sqsBody);
+            commandNode = objectMapper.readTree(sqsBody);
         } catch (tools.jackson.core.JacksonException e) {
             throw new IllegalArgumentException("Malformed processing message", e);
         }
-        if (command != null && (command.has("jobType") || command.has("sourceKey"))) {
+        if (commandNode != null && (commandNode.has("jobType") || commandNode.has("sourceKey"))) {
             var job = objectMapper.readValue(sqsBody, ProcessingJobRecord.class);
             uploadId = job.uploadId();
             attemptId = job.attemptId();
