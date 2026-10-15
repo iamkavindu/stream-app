@@ -12,7 +12,7 @@
 - Native hints cover coordination documents; shared key/result fixtures, Floci publication recovery, lease release, HTTP range and migration/API regressions cover the new layout
 - Updated excluded real-FFmpeg valid-media test for the new retained artifact reference; documented stacked rollout and required native/browser acceptance
 
-**Validation:** Scoped diff checks pass. First integration CI passed backend and real-S3 recovery tests; one Mockito re-stubbing setup error was corrected using doThrow, with the strict lost-ownership assertion retained. Hosted rerun pending. Foundation PR #15 passed hosted ownership/CAS/corrupt-state checks after normalizing the corrupt-state exception. Native duplicate delivery/lease recovery and real playback require local acceptance.
+**Validation:** Scoped diff checks pass. First integration CI passed backend and real-S3 recovery tests; one Mockito re-stubbing setup error was corrected using doThrow, with the strict lost-ownership assertion retained. Hosted rerun passed 94 backend and 31 Lambda tests with zero failures/errors/skips, plus frontend tests/build. Foundation PR #15 passed hosted ownership/CAS/corrupt-state checks after normalizing the corrupt-state exception. Native duplicate delivery/lease recovery and real playback require local acceptance.
 
 ---
 
@@ -26,7 +26,7 @@
 - Floci integration regressions — competing claims, expired takeover, stale-owner rejection, immutable result/restart, deadline rejection and corrupt state
 - Project/backlog — record PR #14 local confirmation/merge, distinguish this unwired primitive from the next worker integration slice
 
-**Validation:** Scoped diff checks pass. First hosted run passed ownership/CAS/result cases; malformed JSON raised a Jackson exception rather than the store error type, now normalized without weakening the regression. Hosted rerun passed Java/frontend CI. No worker behavior, output path, API, schema, dependency, wrapper or lockfile changes in this slice.
+**Validation:** Scoped diff checks pass. First hosted run passed ownership/CAS/result cases; malformed JSON raised a Jackson exception rather than the store error type, now normalized without weakening the regression. Hosted rerun passed 90 backend and 26 Lambda tests with no failures/errors/skips, plus frontend tests/build. No worker behavior, output path, API, schema, dependency, wrapper or lockfile changes in this slice.
 
 ---
 
