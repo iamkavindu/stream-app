@@ -232,7 +232,8 @@ class TranscoderUnitTest {
 
     @Test
     void busyLeaseDoesNotDownloadTranscodeOrPublish() {
-        when(leaseStore.acquire(any(), any())).thenThrow(new ProcessingLeaseStore.LeaseUnavailableException());
+        org.mockito.Mockito.doThrow(new ProcessingLeaseStore.LeaseUnavailableException())
+                .when(leaseStore).acquire(any(), any());
         assertThatThrownBy(() -> transcoder.transcodeVideo().accept(payload))
                 .isInstanceOf(ProcessingLeaseStore.LeaseUnavailableException.class);
         verify(s3Client, org.mockito.Mockito.never()).getObject(any(GetObjectRequest.class), any(Path.class));
@@ -242,7 +243,8 @@ class TranscoderUnitTest {
 
     @Test
     void lostOwnershipCannotPublishReadiness() {
-        when(leaseStore.complete(any(), any())).thenThrow(new ProcessingLeaseStore.LeaseUnavailableException());
+        org.mockito.Mockito.doThrow(new ProcessingLeaseStore.LeaseUnavailableException())
+                .when(leaseStore).complete(any(), any());
         assertThatThrownBy(() -> transcoder.transcodeVideo().accept(payload)).isInstanceOf(IllegalStateException.class);
         assertThat(resultMessages).isEmpty();
         assertWorkDirsCleaned();

@@ -12,7 +12,7 @@
 - Native hints cover coordination documents; shared key/result fixtures, Floci publication recovery, lease release, HTTP range and migration/API regressions cover the new layout
 - Updated excluded real-FFmpeg valid-media test for the new retained artifact reference; documented stacked rollout and required native/browser acceptance
 
-**Validation:** Scoped diff checks pass; hosted CI pending. Foundation PR #15 passed hosted ownership/CAS/corrupt-state checks after normalizing the corrupt-state exception. Native duplicate delivery/lease recovery and real playback require local acceptance.
+**Validation:** Scoped diff checks pass. First integration CI passed backend and real-S3 recovery tests; one Mockito re-stubbing setup error was corrected using doThrow, with the strict lost-ownership assertion retained. Hosted rerun pending. Foundation PR #15 passed hosted ownership/CAS/corrupt-state checks after normalizing the corrupt-state exception. Native duplicate delivery/lease recovery and real playback require local acceptance.
 
 ---
 

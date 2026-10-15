@@ -105,6 +105,8 @@ public class Transcoder {
         var srcKey = event.objectKey();
         var lease = leaseStore.acquire(uploadId, uploadId);
         if (lease.completedResult() != null) {
+            log.info("Replaying retained processing result for upload {} / attempt {} / execution {}",
+                    lease.uploadId(), lease.attemptId(), lease.executionId());
             publishStoredResult(lease, lease.completedResult());
             return;
         }
