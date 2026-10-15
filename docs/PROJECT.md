@@ -664,3 +664,5 @@ The command's explicit attempt controls the coordination key, output prefix, and
 Before enabling retry dispatch, deploy the rebuilt native worker and send the shared command fixture through SQS for a disposable failed video, using its existing source and a fresh attempt UUID. Confirm retained result and output use that attempt, duplicate delivery does not rerun FFmpeg, and a delayed initial notification still uses the initial identity. The backend must ignore this unregistered test attempt's result. This is worker protocol acceptance, not an end-user retry flow.
 
 Exact Linux native probe commands: [processing-command-acceptance.md](./processing-command-acceptance.md).
+
+PR #18 hosted Java 25/Docker validation passed 97 backend and 37 Lambda tests with zero failures/errors/skips; frontend tests/build passed. Real-Floci storage tests verify retained explicit-attempt results across worker restart and isolation from a later initial notification. CI uses synthetic output for these recovery cases; deployed native command parsing remains the local checkpoint.

@@ -2,7 +2,7 @@
 
 ## 2026-10-15 — SA-013 preparation: explicit attempt processing commands
 
-Add a versioned direct SQS job contract in backend and Lambda, a shared fixture, native hints, and worker routing by explicit attempt. Initial S3 notifications remain bound to the initial attempt. Validate source ownership/layout before storage access; invalid commands fail for queue redrive. Regressions cover contract rejection, distinct initial/retry leases and outputs, and duplicate result replay. PRs #15/#16 are merged; no additional local acceptance is inferred from merger. No retry API or dispatcher is enabled. Hosted validation pending; native command acceptance is required before dispatch rollout.
+Add a versioned direct SQS job contract in backend and Lambda, a shared fixture, native hints, and worker routing by explicit attempt. Initial S3 notifications remain bound to the initial attempt. Validate source ownership/layout before storage access; invalid commands fail for queue redrive. Regressions cover contract rejection, distinct initial/retry leases and outputs, and duplicate result replay. PRs #15/#16 are merged; no additional local acceptance is inferred from merger. No retry API or dispatcher is enabled. First hosted worker build caught a local variable collision, corrected without weakening assertions. Hosted rerun passed 97 backend and 37 Lambda tests with zero failures/errors/skips, including real-Floci attempt isolation/restart and duplicate replay; frontend tests/build passed. Shared DTO parity, fixture JSON, native probe Bash/Python syntax and scoped diff checks pass. Native command acceptance is required before dispatch rollout.
 
 ---
 
