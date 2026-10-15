@@ -271,7 +271,7 @@ Video and history writes share a transaction and require the attempt to belong t
 
 Version 2 result messages gain optional `failureCode` (uppercase identifier, max 64 characters) and `failureDetail` (max 512 characters). New workers report `FFMPEG_EXIT` with the exit status; this does not claim every nonzero exit is invalid media. Upload expiry uses `UPLOAD_EXPIRED`. Success messages carry no failure reason. Invalid failure metadata is rejected without mutation. No worker-start percentage, queue dispatch time, artifact reference or lease is claimed yet.
 
-Rollout: restart/migrate the backend first, then rebuild/redeploy the native Lambda. Existing V2 workers with no reason fields remain supported. PR #14 hosted CI passed 90 backend and 21 Lambda tests with no failures/errors/skips, plus frontend tests/build. Native serialization of the additional fields needs local acceptance; JVM CI covers the producer/consumer fixture and actual PostgreSQL persistence.
+Rollout: restart/migrate the backend first, then rebuild/redeploy the native Lambda. Existing V2 workers with no reason fields remain supported. PR #14 hosted CI passed 90 backend and 21 Lambda tests with no failures/errors/skips, plus frontend tests/build. The user confirmed PR #14 works locally and merged it on 2026-10-15. Native serialization of those fields is locally verified; JVM CI covers the producer/consumer fixture and actual PostgreSQL persistence.
 
 ## Domain model
 
@@ -634,3 +634,9 @@ PR #11 is merged. The first hosted Java CI run passed 76 backend and 19 Lambda t
 2. **Update** `docs/PROJECT.md` when stack, architecture, APIs, setup, or status changes.
 3. **Append** every meaningful change to `docs/CHANGELOG.md` (date, summary, files touched).
 4. Enforced by Cursor rule: `.cursor/rules/project-documentation.mdc`.
+
+## Worker coordination foundation (SA-009 slice 1)
+
+`ProcessingLeaseStore` provides a conditional-write coordination primitive in the existing stream bucket at `_processing/{uploadId}/{attemptId}.json`. Initial creation uses `If-None-Match: *`; expired ownership replacement and durable result commit use `If-Match` against the observed ETag. Every claim gets a fresh execution ID. Busy/expired/lost ownership fails the invocation; it is never treated as completed work. A terminal result is retained for identical republication after restart, without redoing the work. Unknown/corrupt coordination or infrastructure errors fail closed.
+
+This first slice is **not yet wired into Transcoder** and changes no runtime output paths, worker behavior, or API. Integration tests must prove competing acquisition, expiry/recovery, stale-owner fencing, durable result immutability and corrupt-state handling against pinned Floci before the next slice integrates it. The planned lease is 10 minutes, above the deployed 300-second Lambda timeout; no heartbeat or unbounded-runtime guarantee is claimed. The next slice must isolate each execution's output path and only publish the durable winner's result. Clock skew, orphan artifact cleanup, deletion/retry coordination and real AWS conditional-write behavior remain separate verification concerns.

@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-10-15 — SA-009 slice 1: conditional processing lease foundation
+
+**Summary:** Verify coordination and durable result primitives before wiring duplicate-safe native processing.
+
+**Changed**
+
+- ProcessingLeaseStore — conditional acquisition/replacement, expiring execution identity, ETag-fenced result commit and retained terminal result
+- Floci integration regressions — competing claims, expired takeover, stale-owner rejection, immutable result/restart, deadline rejection and corrupt state
+- Project/backlog — record PR #14 local confirmation/merge, distinguish this unwired primitive from the next worker integration slice
+
+**Validation:** Scoped diff checks pass; hosted CI pending. No worker behavior, output path, API, schema, dependency, wrapper or lockfile changes in this slice.
+
+---
+
 ## 2026-10-15 — SA-008 slice 2: persisted attempt history and failure observations
 
 **Summary:** Preserve actual processing observations and distinguish upload expiry from worker-reported failure before adding retries.
