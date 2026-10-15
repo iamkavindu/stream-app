@@ -2,6 +2,7 @@ package dev.iamkavindu.streamapp.lambda;
 
 import dev.iamkavindu.streamapp.lambda.aws.S3ObjectKeys;
 import dev.iamkavindu.streamapp.lambda.aws.S3UploadEventParser;
+import dev.iamkavindu.streamapp.lambda.model.ProcessingJobRecord;
 import dev.iamkavindu.streamapp.lambda.model.VideoStatus;
 import dev.iamkavindu.streamapp.lambda.model.VideoStatusUpdateRecord;
 import dev.iamkavindu.streamapp.lambda.transcode.HlsTranscodeCommand;
@@ -89,28 +90,44 @@ public class Transcoder {
     }
 
     private void processUploadMessage(String sqsBody) {
-        var uploadEvent = uploadEventParser.parseSqsMessage(sqsBody);
-        if (uploadEvent.isEmpty()) {
-            log.warn("Ignoring unparseable upload message");
-            return;
+        // A direct command is explicit: never infer a retry's identity from an S3 event.
+        UUID uploadId;
+        UUID attemptId;
+        String srcKey;
+        tools.jackson.databind.JsonNode command;
+        try {
+            command = objectMapper.readTree(sqsBody);
+        } catch (tools.jackson.core.JacksonException e) {
+            throw new IllegalArgumentException("Malformed processing message", e);
         }
-
-        var event = uploadEvent.get();
-        if (!uploadBucket.equals(event.bucketName())) {
-            log.warn("Ignoring object from unexpected bucket: {}", event.bucketName());
-            return;
+        if (command != null && (command.has("jobType") || command.has("sourceKey"))) {
+            var job = objectMapper.readValue(sqsBody, ProcessingJobRecord.class);
+            uploadId = job.uploadId();
+            attemptId = job.attemptId();
+            srcKey = job.sourceKey();
+        } else {
+            var uploadEvent = uploadEventParser.parseSqsMessage(sqsBody);
+            if (uploadEvent.isEmpty()) {
+                log.warn("Ignoring unparseable upload message");
+                return;
+            }
+            var event = uploadEvent.get();
+            if (!uploadBucket.equals(event.bucketName())) {
+                log.warn("Ignoring object from unexpected bucket: {}", event.bucketName());
+                return;
+            }
+            uploadId = event.uploadId();
+            attemptId = uploadId;
+            srcKey = event.objectKey();
         }
-
-        var uploadId = event.uploadId();
-        var srcKey = event.objectKey();
-        var lease = leaseStore.acquire(uploadId, uploadId);
+        var lease = leaseStore.acquire(uploadId, attemptId);
         if (lease.completedResult() != null) {
             log.info("Replaying retained processing result for upload {} / attempt {} / execution {}",
                     lease.uploadId(), lease.attemptId(), lease.executionId());
             publishStoredResult(lease, lease.completedResult());
             return;
         }
-        log.info("Transcoding upload {} from s3://{}/{}", uploadId, event.bucketName(), srcKey);
+        log.info("Transcoding upload {} from s3://{}/{}", uploadId, uploadBucket, srcKey);
 
         Path workDir = null;
         Path localInput = null;
@@ -123,7 +140,7 @@ public class Transcoder {
 
             s3Client.getObject(
                     GetObjectRequest.builder()
-                            .bucket(event.bucketName())
+                            .bucket(uploadBucket)
                             .key(srcKey)
                             .build(),
                     localInput);
