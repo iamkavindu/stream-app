@@ -4,6 +4,7 @@ import dev.iamkavindu.streamapp.backend.jooq.tables.records.VideosRecord;
 import dev.iamkavindu.streamapp.backend.video.model.VideoRecord;
 import dev.iamkavindu.streamapp.backend.video.model.VideoStatus;
 import dev.iamkavindu.streamapp.backend.video.model.ProcessingAttemptRecord;
+import dev.iamkavindu.streamapp.backend.video.model.PlaybackArtifactRecord;
 import org.jooq.DSLContext;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
@@ -60,6 +61,17 @@ public class VideoRepository {
                         r.get(PROCESSING_ATTEMPTS.UPLOAD_OBSERVED_AT), r.get(PROCESSING_ATTEMPTS.COMPLETED_AT),
                         r.get(PROCESSING_ATTEMPTS.FAILURE_CODE), r.get(PROCESSING_ATTEMPTS.FAILURE_DETAIL),
                         r.get(PROCESSING_ATTEMPTS.IMPORTED)));
+    }
+
+    public Optional<PlaybackArtifactRecord> findPlaybackArtifact(UUID uploadId) {
+        return dsl.select(PROCESSING_ATTEMPTS.ATTEMPT_ID, PROCESSING_ATTEMPTS.PLAYLIST_KEY)
+                .from(PROCESSING_ATTEMPTS).join(VIDEOS)
+                .on(PROCESSING_ATTEMPTS.UPLOAD_ID.eq(VIDEOS.UPLOAD_ID)
+                        .and(PROCESSING_ATTEMPTS.ATTEMPT_ID.eq(VIDEOS.ACTIVE_ATTEMPT_ID)))
+                .where(VIDEOS.UPLOAD_ID.eq(uploadId)).and(PROCESSING_ATTEMPTS.STAGE.eq("SUCCEEDED"))
+                .and(PROCESSING_ATTEMPTS.PLAYLIST_KEY.isNotNull())
+                .fetchOptional(r -> new PlaybackArtifactRecord(r.get(PROCESSING_ATTEMPTS.ATTEMPT_ID),
+                        r.get(PROCESSING_ATTEMPTS.PLAYLIST_KEY)));
     }
 
     public List<VideoRecord> findAll() {
@@ -137,6 +149,12 @@ public class VideoRepository {
     @Transactional
     public boolean completeTranscode(UUID uploadId, UUID attemptId, VideoStatus terminalStatus,
             String failureCode, String failureDetail) {
+        return completeTranscode(uploadId, attemptId, terminalStatus, failureCode, failureDetail, null);
+    }
+
+    @Transactional
+    public boolean completeTranscode(UUID uploadId, UUID attemptId, VideoStatus terminalStatus,
+            String failureCode, String failureDetail, String playlistKey) {
         if (attemptId == null) {
             throw new IllegalArgumentException("Transcode result must identify an attempt");
         }
@@ -155,18 +173,24 @@ public class VideoRepository {
         if (updated == 0) {
             return false;
         }
-        settleAttempt(uploadId, attemptId, terminalStatus, now, failureCode, failureDetail);
+        settleAttempt(uploadId, attemptId, terminalStatus, now, failureCode, failureDetail, playlistKey);
         return true;
     }
 
     private void settleAttempt(UUID uploadId, UUID attemptId, VideoStatus status, OffsetDateTime now,
             String failureCode, String failureDetail) {
+        settleAttempt(uploadId, attemptId, status, now, failureCode, failureDetail, null);
+    }
+
+    private void settleAttempt(UUID uploadId, UUID attemptId, VideoStatus status, OffsetDateTime now,
+            String failureCode, String failureDetail, String playlistKey) {
         requireAttemptUpdate(dsl.update(PROCESSING_ATTEMPTS)
                 .set(PROCESSING_ATTEMPTS.STAGE, status == VideoStatus.PLAY_READY ? "SUCCEEDED" : "FAILED")
                 .set(PROCESSING_ATTEMPTS.COMPLETED_AT, now)
                 .set(PROCESSING_ATTEMPTS.FAILURE_CODE, status == VideoStatus.FAILED
                         ? (failureCode == null ? "TRANSCODE_FAILED" : failureCode) : null)
                 .set(PROCESSING_ATTEMPTS.FAILURE_DETAIL, status == VideoStatus.FAILED ? failureDetail : null)
+                .set(PROCESSING_ATTEMPTS.PLAYLIST_KEY, status == VideoStatus.PLAY_READY ? playlistKey : null)
                 .where(PROCESSING_ATTEMPTS.ATTEMPT_ID.eq(attemptId))
                 .and(PROCESSING_ATTEMPTS.UPLOAD_ID.eq(uploadId)).execute());
     }

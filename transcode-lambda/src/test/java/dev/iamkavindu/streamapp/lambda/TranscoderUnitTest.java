@@ -1,6 +1,7 @@
 package dev.iamkavindu.streamapp.lambda;
 
 import dev.iamkavindu.streamapp.lambda.aws.S3UploadEventParser;
+import dev.iamkavindu.streamapp.lambda.coordination.ProcessingLeaseStore;
 import dev.iamkavindu.streamapp.lambda.support.MessagingFixtures;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -38,6 +39,8 @@ import static org.mockito.Mockito.times;
 
 class TranscoderUnitTest {
 
+    private final ProcessingLeaseStore leaseStore = mock(ProcessingLeaseStore.class);
+    private final java.util.Map<UUID, ProcessingLeaseStore.Lease> leases = new java.util.HashMap<>();
     private final S3Client s3Client = mock(S3Client.class);
     private final SqsClient sqsClient = mock(SqsClient.class);
     private final ObjectMapper mapper = new ObjectMapper();
@@ -55,6 +58,24 @@ class TranscoderUnitTest {
     void setUp() {
         payload = MessagingFixtures.sqsLambdaEnvelope(UUID.randomUUID(), "demo.mp4")
                 .getBytes(StandardCharsets.UTF_8);
+        when(leaseStore.acquire(any(), any())).thenAnswer(invocation -> {
+            UUID id = invocation.getArgument(0);
+            return leases.computeIfAbsent(id, key -> new ProcessingLeaseStore.Lease(id, id, UUID.randomUUID(),
+                    UUID.randomUUID().toString(), java.time.Instant.now().plusSeconds(600), null));
+        });
+        when(leaseStore.complete(any(), any())).thenAnswer(invocation -> {
+            ProcessingLeaseStore.Lease lease = invocation.getArgument(0);
+            String result = invocation.getArgument(1);
+            leases.put(lease.uploadId(), new ProcessingLeaseStore.Lease(lease.uploadId(), lease.attemptId(),
+                    lease.executionId(), lease.etag(), lease.expiresAt(), result));
+            return result;
+        });
+        doAnswer(invocation -> {
+            ProcessingLeaseStore.Lease lease = invocation.getArgument(0);
+            var current = leases.get(lease.uploadId());
+            if (current != null && current.completedResult() == null) leases.remove(lease.uploadId());
+            return null;
+        }).when(leaseStore).release(any());
         when(sqsClient.getQueueUrl(org.mockito.ArgumentMatchers.<Consumer<GetQueueUrlRequest.Builder>>any()))
                 .thenReturn(GetQueueUrlResponse.builder().queueUrl("http://floci/results").build());
         doAnswer(invocation -> {
@@ -72,7 +93,7 @@ class TranscoderUnitTest {
             return SendMessageResponse.builder().messageId("result").build();
         }).when(sqsClient).sendMessage(org.mockito.ArgumentMatchers.<Consumer<SendMessageRequest.Builder>>any());
         transcoder = new Transcoder(s3Client, sqsClient, mapper, new S3UploadEventParser(mapper),
-                "streamapp-uploads", "streamapp-streams", "unused-ffmpeg", "results") {
+                "streamapp-uploads", "streamapp-streams", "unused-ffmpeg", "results", leaseStore) {
             @Override
             void executeNativeProcess(List<String> command) throws Exception {
                 var manifest = Path.of(command.getLast());
@@ -90,16 +111,17 @@ class TranscoderUnitTest {
 
     @Test
     void publishesSharedVersionTwoContractForSuccessAndMediaFailure() {
-        var uploadId = MessagingFixtures.SAMPLE_UPLOAD_ID;
-        payload = MessagingFixtures.sqsLambdaEnvelope(uploadId, "demo.mp4").getBytes(StandardCharsets.UTF_8);
         for (var status : new String[] {"PLAY_READY", "FAILED"}) {
+            var uploadId = UUID.randomUUID();
+            payload = MessagingFixtures.sqsLambdaEnvelope(uploadId, "demo.mp4").getBytes(StandardCharsets.UTF_8);
             workerFailure = status.equals("FAILED") ? new Transcoder.FfmpegExitException(1) : null;
             transcoder.transcodeVideo().accept(payload);
             var expected = MessagingFixtures.loadTemplate(status.equals("FAILED")
-                    ? "messaging/transcode-complete-failed-v2.json" : "messaging/transcode-complete-v2.json")
+                    ? "messaging/transcode-complete-failed-v2.json" : "messaging/transcode-complete-execution-v2.json")
                     .replace("{{uploadId}}", uploadId.toString())
                     .replace("{{attemptId}}", uploadId.toString())
-                    .replace("{{status}}", status);
+                    .replace("{{status}}", status)
+                    .replace("{{executionId}}", leases.get(uploadId).executionId().toString());
             assertThat(mapper.readTree(resultMessages.getLast())).isEqualTo(mapper.readTree(expected));
         }
         assertWorkDirsCleaned();
@@ -117,6 +139,9 @@ class TranscoderUnitTest {
             assertThat(request.key()).endsWith("/media.mp4");
             assertThat(request.contentType()).isEqualTo("video/mp4");
         });
+        assertThat(requests.getAllValues().getFirst().key()).endsWith("/media.mp4");
+        assertThat(requests.getAllValues().getLast().key()).endsWith("/index.m3u8");
+        assertThat(requests.getAllValues()).allSatisfy(r -> assertThat(r.ifNoneMatch()).isEqualTo("*"));
         assertThat(deliveredStatuses).containsExactly("PLAY_READY");
         assertWorkDirsCleaned();
     }
@@ -132,6 +157,9 @@ class TranscoderUnitTest {
         transcoder.transcodeVideo().accept(payload);
         assertThat(attemptedStatuses).containsExactly("PLAY_READY", "PLAY_READY");
         assertThat(deliveredStatuses).containsExactly("PLAY_READY");
+        assertThat(workDirs).hasSize(1);
+        assertThat(resultMessages).hasSize(2);
+        assertThat(resultMessages.get(0)).isEqualTo(resultMessages.get(1));
         assertWorkDirsCleaned();
     }
 
@@ -199,6 +227,26 @@ class TranscoderUnitTest {
         workerFailure = null;
         transcoder.transcodeVideo().accept(payload);
         assertThat(deliveredStatuses).containsExactly("PLAY_READY");
+        assertWorkDirsCleaned();
+    }
+
+    @Test
+    void busyLeaseDoesNotDownloadTranscodeOrPublish() {
+        org.mockito.Mockito.doThrow(new ProcessingLeaseStore.LeaseUnavailableException())
+                .when(leaseStore).acquire(any(), any());
+        assertThatThrownBy(() -> transcoder.transcodeVideo().accept(payload))
+                .isInstanceOf(ProcessingLeaseStore.LeaseUnavailableException.class);
+        verify(s3Client, org.mockito.Mockito.never()).getObject(any(GetObjectRequest.class), any(Path.class));
+        assertThat(workDirs).isEmpty();
+        assertThat(resultMessages).isEmpty();
+    }
+
+    @Test
+    void lostOwnershipCannotPublishReadiness() {
+        org.mockito.Mockito.doThrow(new ProcessingLeaseStore.LeaseUnavailableException())
+                .when(leaseStore).complete(any(), any());
+        assertThatThrownBy(() -> transcoder.transcodeVideo().accept(payload)).isInstanceOf(IllegalStateException.class);
+        assertThat(resultMessages).isEmpty();
         assertWorkDirsCleaned();
     }
 

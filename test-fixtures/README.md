@@ -9,3 +9,5 @@ Both Maven modules mount this directory as a test resource root (`../test-fixtur
 `messaging/transcode-complete.json` preserves the legacy result. `transcode-complete-v2.json` specifies version 2 with explicit attempt identity; both producer and consumer regressions use it.
 
 `transcode-complete-failed-v2.json` adds the optional bounded FFmpeg failure fields. Success V2 fixtures keep those fields null.
+
+`transcode-complete-execution-v2.json` adds the optional winning execution playlist key. Older V2 fixtures retain the no-reference compatibility path.

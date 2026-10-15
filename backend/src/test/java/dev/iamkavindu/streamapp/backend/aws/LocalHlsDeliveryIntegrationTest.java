@@ -4,6 +4,8 @@ import dev.iamkavindu.streamapp.backend.support.IntegrationTest;
 import dev.iamkavindu.streamapp.backend.support.PresignedUrlTestSupport;
 import io.floci.testcontainers.FlociContainer;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
@@ -51,19 +53,26 @@ class LocalHlsDeliveryIntegrationTest {
         assertThat(cors.getFirst().exposeHeaders()).contains("Accept-Ranges", "Content-Range", "ETag");
     }
 
-    @Test
-    void signedManifestResolvesUnsignedMediaWithExactByteRangesAndHead() throws Exception {
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void signedManifestResolvesUnsignedMediaWithExactByteRangesAndHead(boolean scopedExecution) throws Exception {
         new ResourceInitialize(s3Client, true).init();
         var uploadId = UUID.randomUUID();
+        var executionId = UUID.randomUUID();
+        var playlistKey = scopedExecution ? S3ObjectKeys.executionPlaylistKey(uploadId, uploadId, executionId)
+                : S3ObjectKeys.streamPlaylistKey(uploadId);
+        var mediaKey = scopedExecution ? S3ObjectKeys.executionMediaKey(uploadId, uploadId, executionId)
+                : S3ObjectKeys.streamMediaKey(uploadId);
         var manifest = "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:1\n"
                 + "#EXT-X-MAP:URI=\"media.mp4\",BYTERANGE=\"4@0\"\n"
                 + "#EXTINF:1.0,\n#EXT-X-BYTERANGE:6@4\nmedia.mp4\n#EXT-X-ENDLIST\n";
-        s3Client.putObject(b -> b.bucket(BUCKET).key(S3ObjectKeys.streamPlaylistKey(uploadId))
+        s3Client.putObject(b -> b.bucket(BUCKET).key(playlistKey)
                 .contentType("application/vnd.apple.mpegurl"), RequestBody.fromString(manifest));
-        s3Client.putObject(b -> b.bucket(BUCKET).key(S3ObjectKeys.streamMediaKey(uploadId))
+        s3Client.putObject(b -> b.bucket(BUCKET).key(mediaKey)
                 .contentType("video/mp4"), RequestBody.fromString("INIT012345"));
         var playlistUrl = URI.create(PresignedUrlTestSupport.toPathStyleHttpUrl(
-                s3Service.createSignedPlaylistGetUrl(uploadId), floci));
+                (scopedExecution ? s3Service.createSignedPlaylistGetUrl(uploadId, uploadId, playlistKey)
+                        : s3Service.createSignedPlaylistGetUrl(uploadId)), floci));
         try (var http = HttpClient.newHttpClient()) {
             var playlist = http.send(request(playlistUrl).GET().build(), HttpResponse.BodyHandlers.ofString());
             assertThat(playlist.statusCode()).isEqualTo(200);
@@ -98,8 +107,8 @@ class LocalHlsDeliveryIntegrationTest {
             assertThat(preflight.statusCode()).isBetween(200, 299);
             assertThat(preflight.headers().firstValue("Access-Control-Allow-Origin")).hasValue(ORIGIN);
         } finally {
-            s3Client.deleteObject(b -> b.bucket(BUCKET).key(S3ObjectKeys.streamPlaylistKey(uploadId)));
-            s3Client.deleteObject(b -> b.bucket(BUCKET).key(S3ObjectKeys.streamMediaKey(uploadId)));
+            s3Client.deleteObject(b -> b.bucket(BUCKET).key(playlistKey));
+            s3Client.deleteObject(b -> b.bucket(BUCKET).key(mediaKey));
         }
     }
 

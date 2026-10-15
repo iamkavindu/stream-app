@@ -196,6 +196,13 @@ public class VideoService {
 
 
 
+        var artifact = videoRepository.findPlaybackArtifact(uploadId);
+        if (artifact.isPresent()) {
+            var current = artifact.get();
+            return new SignedGetUrlRecord(uploadId, current.playlistKey(),
+                    s3Service.createSignedPlaylistGetUrl(uploadId, current.attemptId(), current.playlistKey()));
+        }
+
         var objectKey = S3ObjectKeys.streamPlaylistKey(uploadId);
 
         var signedUrl = s3Service.createSignedPlaylistGetUrl(uploadId);
@@ -297,10 +304,16 @@ public class VideoService {
             return;
         }
 
+        if (update.playlistKey() != null && (!update.isAttemptResult() || update.status() != VideoStatus.PLAY_READY
+                || !S3ObjectKeys.isExecutionPlaylistKey(update.uploadId(), update.attemptId(), update.playlistKey()))) {
+            log.warn("Ignoring invalid playback artifact for upload {}", update.uploadId());
+            return;
+        }
+
         var updated = update.isLegacy()
                 ? videoRepository.completeTranscode(update.uploadId(), update.status())
                 : videoRepository.completeTranscode(update.uploadId(), update.attemptId(), update.status(),
-                        update.failureCode(), update.failureDetail());
+                        update.failureCode(), update.failureDetail(), update.playlistKey());
         if (updated) {
             log.info("Transcode complete for {} — status set to {}", update.uploadId(), update.status());
             return;

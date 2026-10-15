@@ -189,7 +189,7 @@ FFmpeg flags (VOD fMP4 HLS, 4 s segments, single combined media file):
 | `-hls_segment_filename` | `{outputDir}/media.mp4` | Combined fMP4 output |
 | *(final arg)* | `{outputDir}/index.m3u8` | Media playlist |
 
-5. Upload `outputDir/index.m3u8` and `outputDir/media.mp4` to `streamapp-streams/{uploadId}/` (keys from `S3ObjectKeys.streamPlaylistKey` / `streamMediaKey`).
+5. Upload media first, then the playlist, under `streamapp-streams/{uploadId}/attempts/{attemptId}/executions/{executionId}/`. Commit the execution result conditionally before publishing readiness. Existing videos retain their legacy fixed paths.
 6. Publish a `VideoStatusUpdateRecord` JSON message to `video-transcode-complete-backend`:
 
 ```json
@@ -205,9 +205,9 @@ Use `"status": "FAILED"` for a nonzero FFmpeg exit only after that result has be
 
 **Result publication and redelivery (SA-004):** Queue lookup, serialization, and send failures propagate out of the function. A failed `PLAY_READY` send is never converted to `FAILED`. A nonzero FFmpeg exit publishes `FAILED`; failure to publish it also fails the invocation. Source download, output upload, temporary-file/output-artifact problems, and inability to start FFmpeg fail the invocation without publishing a terminal result. Interrupted workers restore the interrupt flag. The existing best-effort temporary-directory cleanup runs in `finally` on every path, including publication failure; stricter cleanup/process bounds remain SA-012.
 
-The current nonzero FFmpeg exit policy is retained; exit code alone does not identify every failure cause. More detailed media validation/failure classification remains SA-011. Redelivery can redo the initial transcode and overwrite output; result identity is introduced in SA-008 slice 1, but worker ownership/output idempotency remain SA-008/SA-009. The consumer throws for the whole batch, so earlier successful records may also be redelivered. SA-006 slice 1 configures five receives before DLQ delivery, a 1,800-second Lambda source visibility window, and explicit retention; the user verified repeat provisioning, payload preservation, five-receive exhaustion, and DLQ replay on pinned Floci. Native delivery verification remains pending. Deployed/native Lambda redelivery still needs local acceptance verification.
+The current nonzero FFmpeg exit policy is retained; exit code alone does not identify every failure cause. More detailed media validation/failure classification remains SA-011. SA-009 slice 2 adds execution leases, isolated outputs and retained results: redelivery republishes a committed result without retranscoding; unfinished work can recover under a new execution prefix. Processing retry dispatch remains future work. The consumer throws for the whole batch, so earlier successful records may also be redelivered. SA-006 slice 1 configures five receives before DLQ delivery, a 1,800-second Lambda source visibility window, and explicit retention; the user verified repeat provisioning, payload preservation, five-receive exhaustion, and DLQ replay on pinned Floci. Native delivery verification remains pending. Deployed/native Lambda redelivery still needs local acceptance verification.
 
-Example stream-bucket layout after transcode:
+Legacy stream-bucket layout (new executions use the isolated layout described under fenced worker publication):
 
 ```
 streamapp-streams/{uploadId}/
@@ -232,7 +232,7 @@ A presigned URL covers **one** S3 object. HLS.js loads `index.m3u8` first, then 
 | **Production** | CloudFront in front of `streamapp-streams` with **signed cookies** (or signed URLs) scoped to `/{uploadId}/*`, or a backend media proxy |
 | **Local dev (Floci)** | Explicit anonymous `s3:GetObject` policy for `streamapp-streams/*/index.m3u8` and `*/media.mp4`; CORS permits `GET`/`HEAD` from `http://localhost:5173` and exposes range/ETag headers |
 
-The backend still returns a 15-minute presigned GET for `{uploadId}/index.m3u8`. The local read policy also permits unsigned generated-object reads, so URL expiry is deliberately **not** an access boundary in this demo. It grants no list/write permissions or access to the upload bucket. `streamapp.local-hls.public-read-enabled` defaults to false and is explicitly enabled in `application-dev.properties`; disabling it stops policy updates but does not revoke an already installed policy. Remove that policy explicitly when switching an existing bucket to private delivery. Keep real AWS buckets private and use CloudFront signed cookies (or a proxy) for complete HLS access; do not deploy the local dev settings there.
+The backend returns a 15-minute presigned GET for the stored winning manifest, falling back to `{uploadId}/index.m3u8` for legacy videos. The local read policy also permits unsigned generated-object reads, so URL expiry is deliberately **not** an access boundary in this demo. It grants no list/write permissions or access to the upload bucket. `streamapp.local-hls.public-read-enabled` defaults to false and is explicitly enabled in `application-dev.properties`; disabling it stops policy updates but does not revoke an already installed policy. Remove that policy explicitly when switching an existing bucket to private delivery. Keep real AWS buckets private and use CloudFront signed cookies (or a proxy) for complete HLS access; do not deploy the local dev settings there.
 
 The worker writes `application/vnd.apple.mpegurl` for playlists and `video/mp4` for media. Redeploy the Lambda and transcode a new video to obtain the new metadata; existing objects are not rewritten. The default backend suite exercises the actual dev initializer and pinned Floci over HTTP: stored policy/CORS, relative unsigned media requests, exact `206` byte ranges, HEAD, preflight, and missing output. PR #12 hosted CI passed all 80 backend and 20 Lambda tests with zero skips, plus frontend tests/build. These synthetic bytes verify transport, not decoding or seeking. The user confirmed the application works after Linux native deployment and merged PR #12 on 2026-10-15. Specific Safari and expired-access scenarios were not separately reported. Browser/native acceptance steps are in [hls-delivery.md](./hls-delivery.md); policy enforcement outside the pinned emulator and private-access expiry remain unverified.
 
@@ -271,7 +271,7 @@ Video and history writes share a transaction and require the attempt to belong t
 
 Version 2 result messages gain optional `failureCode` (uppercase identifier, max 64 characters) and `failureDetail` (max 512 characters). New workers report `FFMPEG_EXIT` with the exit status; this does not claim every nonzero exit is invalid media. Upload expiry uses `UPLOAD_EXPIRED`. Success messages carry no failure reason. Invalid failure metadata is rejected without mutation. No worker-start percentage, queue dispatch time, artifact reference or lease is claimed yet.
 
-Rollout: restart/migrate the backend first, then rebuild/redeploy the native Lambda. Existing V2 workers with no reason fields remain supported. PR #14 hosted CI passed 90 backend and 21 Lambda tests with no failures/errors/skips, plus frontend tests/build. Native serialization of the additional fields needs local acceptance; JVM CI covers the producer/consumer fixture and actual PostgreSQL persistence.
+Rollout: restart/migrate the backend first, then rebuild/redeploy the native Lambda. Existing V2 workers with no reason fields remain supported. PR #14 hosted CI passed 90 backend and 21 Lambda tests with no failures/errors/skips, plus frontend tests/build. The user confirmed PR #14 works locally and merged it on 2026-10-15. Native serialization of those fields is locally verified; JVM CI covers the producer/consumer fixture and actual PostgreSQL persistence.
 
 ## Domain model
 
@@ -302,7 +302,7 @@ Table: `videos` (Flyway V1 plus forward `V2__add_active_attempt_identity.sql`)
 |--------|------|--------|-------------|
 | `GET` | `/api/v1/videos` | Implemented | List all videos from the `videos` table |
 | `GET` | `/api/v1/videos/{uploadId}/attempts` | Implemented | Chronological attempt observations and failure details; unknown video is 404 |
-| `GET` | `/api/v1/videos/{uploadId}/signed-url` | Implemented | Presigned S3 GET URL for `{uploadId}/index.m3u8` in `streamapp-streams` (HLS manifest; `PLAY_READY` only) |
+| `GET` | `/api/v1/videos/{uploadId}/signed-url` | Implemented | Presigned S3 GET URL for the active winning HLS manifest, with legacy fixed-path fallback (`PLAY_READY` only) |
 | `POST` | `/api/v1/videos` | Implemented | Create pending upload row and return presigned S3 PUT URL |
 | `POST` | `/api/v1/videos/{uploadId}/upload-url` | Implemented | Reconcile/renew an existing pending transfer; never register another row |
 
@@ -634,3 +634,23 @@ PR #11 is merged. The first hosted Java CI run passed 76 backend and 19 Lambda t
 2. **Update** `docs/PROJECT.md` when stack, architecture, APIs, setup, or status changes.
 3. **Append** every meaningful change to `docs/CHANGELOG.md` (date, summary, files touched).
 4. Enforced by Cursor rule: `.cursor/rules/project-documentation.mdc`.
+
+## Worker coordination foundation (SA-009 slice 1)
+
+`ProcessingLeaseStore` provides a conditional-write coordination primitive in the existing stream bucket at `_processing/{uploadId}/{attemptId}.json`. Initial creation uses `If-None-Match: *`; expired ownership replacement and durable result commit use `If-Match` against the observed ETag. Every claim gets a fresh execution ID. Busy/expired/lost ownership fails the invocation; it is never treated as completed work. A terminal result is retained for identical republication after restart, without redoing the work. Unknown/corrupt coordination or infrastructure errors fail closed.
+
+This first slice is the standalone foundation in PR #15. PR #16 wires it into Transcoder and changes new output paths as described below. Integration tests must prove competing acquisition, expiry/recovery, stale-owner fencing, durable result immutability and corrupt-state handling against pinned Floci before the next slice integrates it. The planned lease is 10 minutes, above the deployed 300-second Lambda timeout; no heartbeat or unbounded-runtime guarantee is claimed. The stacked integration isolates each execution's output path and only publishes the durable winner's result. PR #15 hosted CI passed 90 backend and 26 Lambda tests without failures/errors/skips, plus frontend tests/build. Clock skew, orphan artifact cleanup, deletion/retry coordination and real AWS conditional-write behavior remain separate verification concerns.
+
+### Fenced worker publication (SA-009 slice 2)
+
+New executions write `{uploadId}/attempts/{attemptId}/executions/{executionId}/media.mp4` followed by `index.m3u8`, with conditional creation on both. Each recovered claim gets a new execution ID, so an expired worker cannot overwrite its successor's files. Only a current, unexpired ETag owner can durably commit the exact result. Transient failures conditionally expire unfinished ownership; release cannot erase an already committed or replaced result. Process death recovers after the 10-minute lease expires. The native function timeout remains 300 seconds; no heartbeat/unbounded processing duration is supported.
+
+After commit, SQS failure fails the invocation. Redelivery reads/validates the retained result and republishes its identical body without downloading the source, rerunning FFmpeg, or rewriting output. Source/output/coordination errors do not become business failures. Nonzero FFmpeg exit retains a FAILED result before publication. Busy/lost ownership must not be acknowledged as success.
+
+Flyway V4 adds nullable `processing_attempts.playlist_key`. Version 2 success results can include `playlistKey`; backend validates the upload/attempt/canonical execution UUID layout and stores it atomically with settlement. Playback signs that active successful reference. Old rows and old messages without a reference retain `{uploadId}/index.m3u8`; no existing objects are moved. Relative media and the local generated-object read policy work at either depth. The public video list remains unchanged.
+
+Coordination documents are stored separately from generated media and are not granted anonymous read by the local HLS policy. Do not delete them to trigger processing retry: retained results are the delivery-deduplication boundary. Orphan files from abandoned executions, retention/deletion of coordination records, worker-start observations, durable retry dispatch and deletion coordination remain later slices. No exactly-once messaging or real-AWS IAM guarantee is claimed.
+
+PR #16 hosted CI passed 94 backend and 31 Lambda tests with zero failures/errors/skips, plus frontend tests/build. The synthetic-output recovery, actual Floci CAS, artifact selection and nested HTTP range cases passed.
+
+**Stack order:** merge PR #15, then PR #16. For runtime rollout, stop new uploads and let old worker invocations finish; restart/migrate the backend to V4 before rebuilding/redeploying Lambda. Follow [worker-publication.md](./worker-publication.md) for old/new playback and native duplicate-delivery acceptance. SQS-publication recovery and expired-claim takeover remain additional native acceptance scenarios. JVM integration uses real Floci storage with synthetic FFmpeg output plus the existing invalid-media native-process test; it does not deploy a native Lambda.

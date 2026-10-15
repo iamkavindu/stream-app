@@ -34,6 +34,33 @@ public final class S3ObjectKeys {
         return uploadId + "/" + MEDIA_FILE;
     }
 
+    public static String executionPlaylistKey(UUID uploadId, UUID attemptId, UUID executionId) {
+        return executionPrefix(uploadId, attemptId, executionId) + PLAYLIST_FILE;
+    }
+
+    public static String executionMediaKey(UUID uploadId, UUID attemptId, UUID executionId) {
+        return executionPrefix(uploadId, attemptId, executionId) + MEDIA_FILE;
+    }
+
+    private static String executionPrefix(UUID uploadId, UUID attemptId, UUID executionId) {
+        return uploadId + "/attempts/" + attemptId + "/executions/" + executionId + "/";
+    }
+
+    public static boolean isExecutionPlaylistKey(UUID uploadId, UUID attemptId, String key) {
+        var prefix = uploadId + "/attempts/" + attemptId + "/executions/";
+        var suffix = "/" + PLAYLIST_FILE;
+        if (key == null || !key.startsWith(prefix) || !key.endsWith(suffix)
+                || key.length() <= prefix.length() + suffix.length()) {
+            return false;
+        }
+        var execution = key.substring(prefix.length(), key.length() - suffix.length());
+        try {
+            return UUID.fromString(execution).toString().equals(execution);
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
+    }
+
     public static String streamPrefix(UUID uploadId) {
         return uploadId + "/";
     }

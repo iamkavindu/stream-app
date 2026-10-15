@@ -1,5 +1,35 @@
 # Changelog
 
+## 2026-10-15 — SA-009 slice 2: fenced worker execution and isolated playback output
+
+**Summary:** Coordinate duplicate delivery, publish media before manifests, and republish durable results without retranscoding.
+
+**Changed**
+
+- Worker acquires a 10-minute execution lease; retained outcomes are validated and republished, busy/stale owners fail, recoverable errors conditionally release unfinished ownership
+- Each execution writes immutable media/manifest keys; readiness is published only after fenced result commit, preserving output across SQS publication outages
+- Flyway V4 and backend result/playback handling persist a validated winning manifest reference; legacy ready videos retain fixed-path playback
+- Native hints cover coordination documents; shared key/result fixtures, Floci publication recovery, lease release, HTTP range and migration/API regressions cover the new layout
+- Updated excluded real-FFmpeg valid-media test for the new retained artifact reference; documented stacked rollout and required native/browser acceptance
+
+**Validation:** Scoped diff checks pass. First integration CI passed backend and real-S3 recovery tests; one Mockito re-stubbing setup error was corrected using doThrow, with the strict lost-ownership assertion retained. Hosted rerun passed 94 backend and 31 Lambda tests with zero failures/errors/skips, plus frontend tests/build. Foundation PR #15 passed hosted ownership/CAS/corrupt-state checks after normalizing the corrupt-state exception. Native duplicate delivery/lease recovery and real playback require local acceptance.
+
+---
+
+## 2026-10-15 — SA-009 slice 1: conditional processing lease foundation
+
+**Summary:** Verify coordination and durable result primitives before wiring duplicate-safe native processing.
+
+**Changed**
+
+- ProcessingLeaseStore — conditional acquisition/replacement, expiring execution identity, ETag-fenced result commit and retained terminal result
+- Floci integration regressions — competing claims, expired takeover, stale-owner rejection, immutable result/restart, deadline rejection and corrupt state
+- Project/backlog — record PR #14 local confirmation/merge, distinguish this unwired primitive from the next worker integration slice
+
+**Validation:** Scoped diff checks pass. First hosted run passed ownership/CAS/result cases; malformed JSON raised a Jackson exception rather than the store error type, now normalized without weakening the regression. Hosted rerun passed 90 backend and 26 Lambda tests with no failures/errors/skips, plus frontend tests/build. No worker behavior, output path, API, schema, dependency, wrapper or lockfile changes in this slice.
+
+---
+
 ## 2026-10-15 — SA-008 slice 2: persisted attempt history and failure observations
 
 **Summary:** Preserve actual processing observations and distinguish upload expiry from worker-reported failure before adding retries.
