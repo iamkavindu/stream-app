@@ -40,6 +40,22 @@ class AttemptIdentityMigrationIntegrationTest {
             assertThat(dsl.select(uploadId, status).from(table).orderBy(uploadId).fetch()).isEqualTo(before);
             assertThat(dsl.select(uploadId, attemptId).from(table).fetch())
                     .allSatisfy(row -> assertThat(row.get(attemptId)).isEqualTo(row.get(uploadId)));
+            var history = DSL.table(DSL.name(schema, "processing_attempts"));
+            var imported = DSL.field(DSL.name("imported"), Boolean.class);
+            var observedAt = DSL.field(DSL.name("upload_observed_at"));
+            var completedAt = DSL.field(DSL.name("completed_at"));
+            var failureCode = DSL.field(DSL.name("failure_code"), String.class);
+            var stage = DSL.field(DSL.name("stage"), String.class);
+            var migrated = dsl.select(uploadId, imported, observedAt, completedAt, failureCode, stage)
+                    .from(history).fetch();
+            assertThat(migrated).hasSize(before.size()).allSatisfy(row -> {
+                assertThat(row.get(imported)).isTrue();
+                assertThat(row.get(observedAt)).isNull();
+                assertThat(row.get(completedAt)).isNull();
+                if ("FAILED".equals(row.get(stage))) {
+                    assertThat(row.get(failureCode)).isEqualTo("LEGACY_FAILURE_UNKNOWN");
+                }
+            });
         } finally {
             dsl.dropSchemaIfExists(DSL.name(schema)).cascade().execute();
         }

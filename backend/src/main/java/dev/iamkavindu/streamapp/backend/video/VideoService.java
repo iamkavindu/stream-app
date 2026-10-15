@@ -31,6 +31,7 @@ import dev.iamkavindu.streamapp.backend.video.model.VideoStatus;
 import dev.iamkavindu.streamapp.backend.video.model.VideoStatusUpdateRecord;
 
 import dev.iamkavindu.streamapp.backend.video.model.UploadRetryRecord;
+import dev.iamkavindu.streamapp.backend.video.model.ProcessingAttemptRecord;
 
 import io.awspring.cloud.sqs.annotation.SqsListener;
 
@@ -163,6 +164,12 @@ public class VideoService {
 
     }
 
+    @Transactional(readOnly = true)
+    public List<ProcessingAttemptRecord> listAttempts(UUID uploadId) {
+        videoRepository.findByUploadId(uploadId).orElseThrow(() -> new VideoNotFoundException(uploadId));
+        return videoRepository.findAttempts(uploadId);
+    }
+
     @Transactional
 
     public int markStaleAwaitingUploadsFailed(Duration ttl) {
@@ -284,7 +291,7 @@ public class VideoService {
             return;
         }
 
-        if (!update.isLegacy() && !update.isAttemptResult()) {
+        if ((!update.isLegacy() && !update.isAttemptResult()) || !update.hasValidFailureMetadata()) {
             log.warn("Ignoring transcode-complete message for {} with invalid attempt/version contract",
                     update.uploadId());
             return;
@@ -292,7 +299,8 @@ public class VideoService {
 
         var updated = update.isLegacy()
                 ? videoRepository.completeTranscode(update.uploadId(), update.status())
-                : videoRepository.completeTranscode(update.uploadId(), update.attemptId(), update.status());
+                : videoRepository.completeTranscode(update.uploadId(), update.attemptId(), update.status(),
+                        update.failureCode(), update.failureDetail());
         if (updated) {
             log.info("Transcode complete for {} — status set to {}", update.uploadId(), update.status());
             return;

@@ -251,9 +251,27 @@ Upload events arrive SNS-wrapped (S3 `ObjectCreated` fan-out from `video-upload-
 
 SA-008 slice 1 adds `active_attempt_id` through forward migration V2, backfilled to `upload_id` for existing rows. New registrations use that same initial-attempt convention. The Lambda publishes `{uploadId, status, attemptId, schemaVersion: 2}` with `attemptId = uploadId` for S3 ObjectCreated jobs. Backend settlement atomically requires the matching active attempt and an active status; stale results cannot change status or activity. Legacy messages (no attempt ID, absent version or version 1) can settle only the initial attempt. Version 2 without an attempt ID, an attempt ID without version 2, and unsupported versions are logged/acknowledged without mutation, following the current malformed-message policy.
 
-PR #13 hosted CI passed 84 backend and 21 Lambda tests without failures/errors/skips, plus frontend tests/build, including V1-to-V2 existing-data migration and shared result-contract verification. Native result serialization still requires local acceptance.
+PR #13 hosted CI passed 84 backend and 21 Lambda tests without failures/errors/skips, plus frontend tests/build, including V1-to-V2 existing-data migration and shared result-contract verification. The user confirmed local testing and merged PR #13 on 2026-10-15.
 
-Deploy the migrated backend **before** the new worker. Do not roll back the backend while version 2 messages are in flight. No processing retry endpoint or new-attempt dispatcher is introduced here: S3 notifications still represent only the initial attempt. Attempt history/stage/failure metadata, durable retry dispatch, attempt-scoped artifacts and worker leases remain later SA-008/SA-009 slices. `FAILED` also covers stale-upload cleanup; results cannot revive terminal rows. SHA-256 uniqueness remains unchanged, including failed rows, until the recovery policy is implemented.
+Deploy the migrated backend **before** the new worker. Do not roll back the backend while version 2 messages are in flight. No processing retry endpoint or new-attempt dispatcher is introduced here: S3 notifications still represent only the initial attempt. SA-008 slice 2 persists attempt history and failure metadata. Durable retry dispatch, attempt-scoped artifacts and worker leases remain later SA-008/SA-009 slices. `FAILED` also covers stale-upload cleanup; results cannot revive terminal rows. SHA-256 uniqueness remains unchanged, including failed rows, until the recovery policy is implemented.
+
+### Processing attempt observations (SA-008 slice 2)
+
+Flyway V3 adds `processing_attempts`, with one imported initial attempt for each existing video. `GET /api/v1/videos/{uploadId}/attempts` returns chronological history (creation time, then attempt ID), active identity, stage, known observation times, failure reason and `imported`. Unknown IDs return the existing video-not-found ProblemDetail. The list API and frontend contract remain unchanged.
+
+| Stage | Evidence |
+|---|---|
+| `AWAITING_UPLOAD` | Registration committed |
+| `UPLOAD_OBSERVED` | Backend processed upload notification or reconciled the stored source; worker start is unknown |
+| `SUCCEEDED` | Matching success result committed |
+| `FAILED` | Matching failure result committed |
+| `UPLOAD_EXPIRED` | Backend inactivity cleanup committed |
+
+Video and history writes share a transaction and require the attempt to belong to the same video. Failed history writes roll back video transitions; duplicate, stale and conflicting results do not rewrite history. `uploadObservedAt` is the first accepted backend observation, and `completedAt` is backend settlement time, not the worker's finish time. Completion arriving before upload notification leaves upload observation unknown. V3 preserves imported state and registration creation time but does not invent historical observation/completion timestamps. Imported failures use `LEGACY_FAILURE_UNKNOWN`; new results without a reason use `TRANSCODE_FAILED`.
+
+Version 2 result messages gain optional `failureCode` (uppercase identifier, max 64 characters) and `failureDetail` (max 512 characters). New workers report `FFMPEG_EXIT` with the exit status; this does not claim every nonzero exit is invalid media. Upload expiry uses `UPLOAD_EXPIRED`. Success messages carry no failure reason. Invalid failure metadata is rejected without mutation. No worker-start percentage, queue dispatch time, artifact reference or lease is claimed yet.
+
+Rollout: restart/migrate the backend first, then rebuild/redeploy the native Lambda. Existing V2 workers with no reason fields remain supported. PR #14 hosted CI passed 90 backend and 21 Lambda tests with no failures/errors/skips, plus frontend tests/build. Native serialization of the additional fields needs local acceptance; JVM CI covers the producer/consumer fixture and actual PostgreSQL persistence.
 
 ## Domain model
 
@@ -283,6 +301,7 @@ Table: `videos` (Flyway V1 plus forward `V2__add_active_attempt_identity.sql`)
 | Method | Path | Status | Description |
 |--------|------|--------|-------------|
 | `GET` | `/api/v1/videos` | Implemented | List all videos from the `videos` table |
+| `GET` | `/api/v1/videos/{uploadId}/attempts` | Implemented | Chronological attempt observations and failure details; unknown video is 404 |
 | `GET` | `/api/v1/videos/{uploadId}/signed-url` | Implemented | Presigned S3 GET URL for `{uploadId}/index.m3u8` in `streamapp-streams` (HLS manifest; `PLAY_READY` only) |
 | `POST` | `/api/v1/videos` | Implemented | Create pending upload row and return presigned S3 PUT URL |
 | `POST` | `/api/v1/videos/{uploadId}/upload-url` | Implemented | Reconcile/renew an existing pending transfer; never register another row |

@@ -1,0 +1,8 @@
+{
+  "uploadId": "{{uploadId}}",
+  "status": "FAILED",
+  "attemptId": "{{attemptId}}",
+  "schemaVersion": 2,
+  "failureCode": "FFMPEG_EXIT",
+  "failureDetail": "FFmpeg exited with status 1"
+}
