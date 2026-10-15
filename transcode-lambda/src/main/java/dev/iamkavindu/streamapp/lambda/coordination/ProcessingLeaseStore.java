@@ -37,7 +37,12 @@ public final class ProcessingLeaseStore {
         String previousEtag = null;
         try {
             var object = s3.getObjectAsBytes(r -> r.bucket(bucket).key(key(uploadId, attemptId)));
-            var document = mapper.readValue(object.asByteArray(), LeaseDocument.class);
+            LeaseDocument document;
+            try {
+                document = mapper.readValue(object.asByteArray(), LeaseDocument.class);
+            } catch (tools.jackson.core.JacksonException e) {
+                throw new IllegalStateException("Invalid processing coordination document", e);
+            }
             validate(document, uploadId, attemptId);
             previousEtag = requireEtag(object.response().eTag());
             if (document.completedResult() != null) {
