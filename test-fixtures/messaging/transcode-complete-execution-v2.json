@@ -1,0 +1,9 @@
+{
+  "uploadId": "{{uploadId}}",
+  "status": "PLAY_READY",
+  "attemptId": "{{attemptId}}",
+  "schemaVersion": 2,
+  "failureCode": null,
+  "failureDetail": null,
+  "playlistKey": "{{uploadId}}/attempts/{{attemptId}}/executions/{{executionId}}/index.m3u8"
+}

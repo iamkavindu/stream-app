@@ -46,12 +46,14 @@ class AttemptIdentityMigrationIntegrationTest {
             var completedAt = DSL.field(DSL.name("completed_at"));
             var failureCode = DSL.field(DSL.name("failure_code"), String.class);
             var stage = DSL.field(DSL.name("stage"), String.class);
-            var migrated = dsl.select(uploadId, imported, observedAt, completedAt, failureCode, stage)
+            var playlistKey = DSL.field(DSL.name("playlist_key"), String.class);
+            var migrated = dsl.select(uploadId, imported, observedAt, completedAt, failureCode, stage, playlistKey)
                     .from(history).fetch();
             assertThat(migrated).hasSize(before.size()).allSatisfy(row -> {
                 assertThat(row.get(imported)).isTrue();
                 assertThat(row.get(observedAt)).isNull();
                 assertThat(row.get(completedAt)).isNull();
+                assertThat(row.get(playlistKey)).isNull();
                 if ("FAILED".equals(row.get(stage))) {
                     assertThat(row.get(failureCode)).isEqualTo("LEGACY_FAILURE_UNKNOWN");
                 }

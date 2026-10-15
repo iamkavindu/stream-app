@@ -5,6 +5,8 @@ import dev.iamkavindu.streamapp.lambda.aws.S3UploadEventParser;
 import dev.iamkavindu.streamapp.lambda.model.VideoStatus;
 import dev.iamkavindu.streamapp.lambda.model.VideoStatusUpdateRecord;
 import dev.iamkavindu.streamapp.lambda.transcode.HlsTranscodeCommand;
+import dev.iamkavindu.streamapp.lambda.coordination.ProcessingLeaseStore;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -24,6 +26,8 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Consumer;
+import java.time.Clock;
+import java.time.Duration;
 
 @Component
 public class Transcoder {
@@ -37,9 +41,11 @@ public class Transcoder {
     private final String streamBucket;
     private final String ffmpegPath;
     private final String transcodeCompleteQueueName;
+    private final ProcessingLeaseStore leaseStore;
 
     private String transcodeCompleteQueueUrl;
 
+    @Autowired
     public Transcoder(
             S3Client s3Client,
             SqsClient sqsClient,
@@ -49,6 +55,14 @@ public class Transcoder {
             @Value("${app.bucket-name.stream-bucket}") String streamBucket,
             @Value("${app.ffmpeg.path}") String ffmpegPath,
             @Value("${app.sqs.queue.transcode-complete-queue}") String transcodeCompleteQueueName) {
+        this(s3Client, sqsClient, objectMapper, uploadEventParser, uploadBucket, streamBucket,
+                ffmpegPath, transcodeCompleteQueueName,
+                new ProcessingLeaseStore(s3Client, objectMapper, streamBucket, Clock.systemUTC(), Duration.ofMinutes(10)));
+    }
+
+    Transcoder(S3Client s3Client, SqsClient sqsClient, ObjectMapper objectMapper,
+            S3UploadEventParser uploadEventParser, String uploadBucket, String streamBucket,
+            String ffmpegPath, String transcodeCompleteQueueName, ProcessingLeaseStore leaseStore) {
         this.s3Client = s3Client;
         this.sqsClient = sqsClient;
         this.objectMapper = objectMapper;
@@ -57,6 +71,7 @@ public class Transcoder {
         this.streamBucket = streamBucket;
         this.ffmpegPath = ffmpegPath;
         this.transcodeCompleteQueueName = transcodeCompleteQueueName;
+        this.leaseStore = leaseStore;
     }
 
     @Bean
@@ -88,6 +103,11 @@ public class Transcoder {
 
         var uploadId = event.uploadId();
         var srcKey = event.objectKey();
+        var lease = leaseStore.acquire(uploadId, uploadId);
+        if (lease.completedResult() != null) {
+            publishStoredResult(lease, lease.completedResult());
+            return;
+        }
         log.info("Transcoding upload {} from s3://{}/{}", uploadId, event.bucketName(), srcKey);
 
         Path workDir = null;
@@ -115,27 +135,34 @@ public class Transcoder {
                 throw new IllegalStateException("Required FFmpeg output artifacts are missing");
             }
 
-            var playlistKey = S3ObjectKeys.streamPlaylistKey(uploadId);
-            var mediaKey = S3ObjectKeys.streamMediaKey(uploadId);
+            var playlistKey = S3ObjectKeys.executionPlaylistKey(uploadId, lease.attemptId(), lease.executionId());
+            var mediaKey = S3ObjectKeys.executionMediaKey(uploadId, lease.attemptId(), lease.executionId());
 
-            s3Client.putObject(
-                    PutObjectRequest.builder().bucket(streamBucket).key(playlistKey)
-                            .contentType("application/vnd.apple.mpegurl").build(),
-                    localManifest);
             s3Client.putObject(
                     PutObjectRequest.builder().bucket(streamBucket).key(mediaKey)
-                            .contentType("video/mp4").build(),
+                            .contentType("video/mp4").ifNoneMatch("*").build(),
                     localMediaFile);
+            s3Client.putObject(
+                    PutObjectRequest.builder().bucket(streamBucket).key(playlistKey)
+                            .contentType("application/vnd.apple.mpegurl").ifNoneMatch("*").build(),
+                    localManifest);
 
-            publishStatus(uploadId, VideoStatus.PLAY_READY);
+            finish(lease, VideoStatus.PLAY_READY, null, null, playlistKey);
             log.info("Transcode complete for {} → s3://{}/{}", uploadId, streamBucket, playlistKey);
         } catch (FfmpegExitException e) {
             log.error("FFmpeg rejected upload {}", uploadId, e);
-            publishStatus(uploadId, VideoStatus.FAILED, "FFMPEG_EXIT", e.getMessage());
+            try {
+                finish(lease, VideoStatus.FAILED, "FFMPEG_EXIT", e.getMessage(), null);
+            } catch (RuntimeException resultFailure) {
+                releaseUnfinished(lease, resultFailure);
+                throw resultFailure;
+            }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+            releaseUnfinished(lease, e);
             throw new IllegalStateException("Transcode interrupted for upload " + uploadId, e);
         } catch (Exception e) {
+            releaseUnfinished(lease, e);
             log.error("Retryable processing error for upload {}", uploadId, e);
             throw new IllegalStateException("Processing must be retried for upload " + uploadId, e);
         } finally {
@@ -145,27 +172,45 @@ public class Transcoder {
         }
     }
 
-    private void publishStatus(UUID uploadId, VideoStatus status) {
-        publishStatus(uploadId, status, null, null);
+    private void releaseUnfinished(ProcessingLeaseStore.Lease lease, Exception original) {
+        try {
+            leaseStore.release(lease);
+        } catch (Exception releaseFailure) {
+            original.addSuppressed(releaseFailure);
+        }
     }
 
-    private void publishStatus(UUID uploadId, VideoStatus status, String failureCode, String failureDetail) {
+    private void finish(ProcessingLeaseStore.Lease lease, VideoStatus status, String failureCode,
+            String failureDetail, String playlistKey) {
+        var result = objectMapper.writeValueAsString(new VideoStatusUpdateRecord(
+                lease.uploadId(), status, lease.attemptId(), 2, failureCode, failureDetail, playlistKey));
+        var committed = leaseStore.complete(lease, result);
+        publishStoredResult(lease, committed);
+    }
+
+    private void publishStoredResult(ProcessingLeaseStore.Lease lease, String message) {
+        var result = objectMapper.readValue(message, VideoStatusUpdateRecord.class);
+        if (result == null || !lease.uploadId().equals(result.uploadId())
+                || !lease.attemptId().equals(result.attemptId()) || !Integer.valueOf(2).equals(result.schemaVersion())
+                || (result.status() != VideoStatus.PLAY_READY && result.status() != VideoStatus.FAILED)
+                || !result.hasValidFailureMetadata()
+                || (result.status() == VideoStatus.PLAY_READY && !S3ObjectKeys.executionPlaylistKey(
+                        lease.uploadId(), lease.attemptId(), lease.executionId()).equals(result.playlistKey()))
+                || (result.status() == VideoStatus.FAILED && result.playlistKey() != null)) {
+            throw new IllegalStateException("Invalid retained processing result");
+        }
         try {
             if (transcodeCompleteQueueUrl == null) {
                 transcodeCompleteQueueUrl = sqsClient
                         .getQueueUrl(req -> req.queueName(transcodeCompleteQueueName))
                         .queueUrl();
             }
-            // S3 ObjectCreated jobs represent the initial attempt only. Future retries need
-            // an explicit job contract; never infer a newer attempt from an old notification.
-            var message = objectMapper.writeValueAsString(
-                    new VideoStatusUpdateRecord(uploadId, status, uploadId, 2, failureCode, failureDetail));
             var queueUrl = transcodeCompleteQueueUrl;
             sqsClient.sendMessage(req -> req.queueUrl(queueUrl).messageBody(message));
         } catch (Exception e) {
             transcodeCompleteQueueUrl = null;
-            log.error("Failed to publish {} for upload {}", status, uploadId, e);
-            throw new IllegalStateException("Failed to publish " + status + " for upload " + uploadId, e);
+            log.error("Failed to publish retained result for upload {}", lease.uploadId(), e);
+            throw new IllegalStateException("Failed to publish result for upload " + lease.uploadId(), e);
         }
     }
 

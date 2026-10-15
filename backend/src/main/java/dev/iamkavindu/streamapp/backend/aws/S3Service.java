@@ -50,4 +50,11 @@ public class S3Service {
         return s3Template.createSignedGetURL(STREAM_BUCKET, objectKey, Duration.ofMinutes(15))
                 .toString();
     }
+
+    public String createSignedPlaylistGetUrl(UUID uploadId, UUID attemptId, String playlistKey) {
+        if (!S3ObjectKeys.isExecutionPlaylistKey(uploadId, attemptId, playlistKey)) {
+            throw new IllegalArgumentException("Playback artifact does not belong to the requested attempt");
+        }
+        return s3Template.createSignedGetURL(STREAM_BUCKET, playlistKey, Duration.ofMinutes(15)).toString();
+    }
 }

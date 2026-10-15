@@ -99,6 +99,24 @@ public final class ProcessingLeaseStore {
         }
     }
 
+    /** Release unfinished work conditionally; an already committed/replaced document is untouched. */
+    public void release(Lease lease) {
+        if (lease.completedResult() != null) {
+            return;
+        }
+        var document = new LeaseDocument(1, lease.uploadId(), lease.attemptId(), lease.executionId(),
+                clock.instant(), null);
+        try {
+            s3.putObject(PutObjectRequest.builder().bucket(bucket).key(key(lease.uploadId(), lease.attemptId()))
+                            .contentType("application/json").ifMatch(lease.etag()).build(),
+                    RequestBody.fromString(mapper.writeValueAsString(document)));
+        } catch (S3Exception e) {
+            if (e.statusCode() != 404 && e.statusCode() != 409 && e.statusCode() != 412) {
+                throw e;
+            }
+        }
+    }
+
     private void validate(LeaseDocument document, UUID uploadId, UUID attemptId) {
         if (document == null || document.schemaVersion() != 1 || !uploadId.equals(document.uploadId())
                 || !attemptId.equals(document.attemptId()) || document.executionId() == null

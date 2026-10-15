@@ -64,17 +64,23 @@ class TranscoderS3IntegrationTest {
         var payload = MessagingFixtures.sqsLambdaEnvelope(uploadId, "clip.mp4");
         transcodeVideo.accept(payload.getBytes(StandardCharsets.UTF_8));
 
-        await().atMost(120, TimeUnit.SECONDS).untilAsserted(() -> {
-            assertThat(headObject(LambdaTestAwsBootstrap.STREAM_BUCKET, S3ObjectKeys.streamPlaylistKey(uploadId)))
-                    .isTrue();
-            assertThat(headObject(LambdaTestAwsBootstrap.STREAM_BUCKET, S3ObjectKeys.streamMediaKey(uploadId)))
-                    .isTrue();
+        var coordination = s3Client.getObjectAsBytes(r -> r.bucket(LambdaTestAwsBootstrap.STREAM_BUCKET)
+                .key(dev.iamkavindu.streamapp.lambda.coordination.ProcessingLeaseStore.key(uploadId, uploadId)));
+        var mapper = new tools.jackson.databind.ObjectMapper();
+        var retained = mapper.readTree(coordination.asUtf8String()).path("completedResult").asText();
+        var result = mapper.readTree(retained);
+        assertThat(result.path("status").asText()).isEqualTo("PLAY_READY");
+        var playlistKey = result.path("playlistKey").asText();
+        assertThat(playlistKey).contains("/attempts/", "/executions/").endsWith("/index.m3u8");
+        assertThat(headObject(LambdaTestAwsBootstrap.STREAM_BUCKET, playlistKey)).isTrue();
+        var mediaKey = playlistKey.substring(0, playlistKey.lastIndexOf('/') + 1) + "media.mp4";
+        assertThat(headObject(LambdaTestAwsBootstrap.STREAM_BUCKET, mediaKey)).isTrue();
+        assertThat(s3Client.headObject(r -> r.bucket(LambdaTestAwsBootstrap.STREAM_BUCKET)
+                .key(mediaKey)).contentType()).isEqualTo("video/mp4");
+        await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
+            var messages = sqsClient.receiveMessage(r -> r.queueUrl(queueUrl()).maxNumberOfMessages(10)).messages();
+            assertThat(messages).anySatisfy(message -> assertThat(message.body()).isEqualTo(retained));
         });
-
-        var messages = sqsClient.receiveMessage(req -> req.queueUrl(queueUrl()).maxNumberOfMessages(1))
-                .messages();
-        assertThat(messages).isNotEmpty();
-        assertThat(messages.getFirst().body()).contains("\"status\":\"PLAY_READY\"");
     }
 
     private void generateMinimalMp4(Path output) throws Exception {

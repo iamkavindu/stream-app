@@ -12,14 +12,20 @@ public record VideoStatusUpdateRecord(
         UUID attemptId,
         Integer schemaVersion,
         String failureCode,
-        String failureDetail
+        String failureDetail,
+        String playlistKey
 ) {
+    public VideoStatusUpdateRecord(UUID uploadId, VideoStatus status, UUID attemptId, Integer schemaVersion,
+            String failureCode, String failureDetail) {
+        this(uploadId, status, attemptId, schemaVersion, failureCode, failureDetail, null);
+    }
+
     public VideoStatusUpdateRecord(UUID uploadId, VideoStatus status) {
-        this(uploadId, status, null, null, null, null);
+        this(uploadId, status, null, null, null, null, null);
     }
 
     public VideoStatusUpdateRecord(UUID uploadId, VideoStatus status, UUID attemptId, Integer schemaVersion) {
-        this(uploadId, status, attemptId, schemaVersion, null, null);
+        this(uploadId, status, attemptId, schemaVersion, null, null, null);
     }
 
     public boolean isLegacy() {

@@ -85,6 +85,21 @@ class ProcessingLeaseStoreIntegrationTest {
     }
 
     @Test
+    void releaseAllowsNewExecutionButCannotEraseCommittedResult() {
+        var id = UUID.randomUUID();
+        var store = store(Clock.systemUTC());
+        var first = store.acquire(id, id);
+        store.release(first);
+        var second = store.acquire(id, id);
+        assertThat(second.executionId()).isNotEqualTo(first.executionId());
+        store.release(first);
+        store.complete(second, "committed");
+        store.release(second);
+        store.release(store.acquire(id, id));
+        assertThat(store.acquire(id, id).completedResult()).isEqualTo("committed");
+    }
+
+    @Test
     void malformedCoordinationIsNotTreatedAsAnAbsentClaim() {
         var id = UUID.randomUUID();
         s3.putObject(r -> r.bucket(BUCKET).key(ProcessingLeaseStore.key(id, id)), RequestBody.fromString("{}"));
