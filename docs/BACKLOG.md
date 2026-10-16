@@ -122,4 +122,4 @@ SA-006 is partial until PowerShell parity and deployed native retry exhaustion a
 - Slice 3: distinguish abandoned/expired transfer sessions from failed processing and recover eligible expired sessions without permanently reserving their hash. Coordinate this contract with SA-008 before resetting terminal states.
 - Do not mark SA-005 complete until these scenarios and the full ambiguous/concurrent PUT acceptance checks pass.
 
-SA-013 retry API/outbox slice: PR #21 ready for review; hosted CI passed 104 backend/37 Lambda tests without skips, frontend and runner checks. End-to-end retry acceptance remains local. Native explicit command identity/replay confirmed by user with unchanged result/artifacts/history; original-notification replay remains unreported.
+SA-013 retry API/outbox slice: PR #21 ready for review; hosted CI passed 105 backend/37 Lambda tests without skips, frontend and runner checks. End-to-end retry acceptance remains local. Native explicit command identity/replay confirmed by user with unchanged result/artifacts/history; original-notification replay remains unreported.
