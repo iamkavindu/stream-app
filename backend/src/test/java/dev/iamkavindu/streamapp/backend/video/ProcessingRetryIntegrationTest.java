@@ -103,6 +103,22 @@ class ProcessingRetryIntegrationTest {
     }
 
     @Test
+    void retrySuccessRequiresItsOwnArtifactInsteadOfFallingBackToInitialOutput() {
+        var retry = retries.retry(failed(true));
+        var id = retry.uploadId();
+        var attempt = retry.attemptId();
+        listeners.onTranscodeComplete(mapper.writeValueAsString(
+                new dev.iamkavindu.streamapp.backend.video.model.VideoStatusUpdateRecord(id, VideoStatus.PLAY_READY, attempt, 2)));
+        assertThat(videos.findByUploadId(id).orElseThrow().status()).isEqualTo(VideoStatus.TRANSCODING_IN_PROGRESS);
+        var key = dev.iamkavindu.streamapp.backend.aws.S3ObjectKeys.executionPlaylistKey(id, attempt, UUID.randomUUID());
+        listeners.onTranscodeComplete(mapper.writeValueAsString(
+                new dev.iamkavindu.streamapp.backend.video.model.VideoStatusUpdateRecord(id, VideoStatus.PLAY_READY,
+                        attempt, 2, null, null, key)));
+        assertThat(videos.findByUploadId(id).orElseThrow().status()).isEqualTo(VideoStatus.PLAY_READY);
+        assertThat(videos.findPlaybackArtifact(id).orElseThrow().playlistKey()).isEqualTo(key);
+    }
+
+    @Test
     void concurrentClicksCreateOnlyOneActiveAttemptAndIntent() throws Exception {
         var id = failed(true);
         var gate = new CountDownLatch(1);

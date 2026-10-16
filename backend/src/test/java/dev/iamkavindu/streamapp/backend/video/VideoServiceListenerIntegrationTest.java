@@ -86,10 +86,12 @@ class VideoServiceListenerIntegrationTest {
     }
 
     private String attemptResult(UUID uploadId, UUID attemptId, VideoStatus status) {
-        return MessagingFixtures.loadTemplate("messaging/transcode-complete-v2.json")
+        return MessagingFixtures.loadTemplate(!uploadId.equals(attemptId) && status == VideoStatus.PLAY_READY
+                        ? "messaging/transcode-complete-execution-v2.json" : "messaging/transcode-complete-v2.json")
                 .replace("{{uploadId}}", uploadId.toString())
                 .replace("{{attemptId}}", attemptId.toString())
-                .replace("{{status}}", status.name());
+                .replace("{{status}}", status.name())
+                .replace("{{executionId}}", UUID.randomUUID().toString());
     }
 
     @Test
