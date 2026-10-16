@@ -2,7 +2,7 @@
 
 ## 2026-10-17 — SA-021 slice 1: one-terminal Linux/Windows startup
 
-Add Bash/PowerShell entry points backed by one standard-library Python runner. Automate local environment, existing Docker/provisioning, backend migration/readiness, cached containerized native worker build, executable layer packaging, S3-backed Lambda deployment and single-message mapping, locked frontend install, process supervision/logs, status and data-preserving stop. Add Linux/Windows runner CI and focused lifecycle/deployment/package regressions; document prerequisites and local acceptance. No application contracts, lockfiles, wrappers or generated sources changed. Validation pending hosted runner/app CI; full native/browser smoke requires local Linux/Windows verification.
+Add Bash/PowerShell entry points backed by one standard-library Python runner. Automate local environment, existing Docker/provisioning, backend migration/readiness, cached containerized native worker build, executable layer packaging, S3-backed Lambda deployment and single-message mapping, locked frontend install, process supervision/logs, status and data-preserving stop. Add Linux/Windows runner CI and focused lifecycle/deployment/package regressions; document prerequisites and local acceptance. No application contracts, lockfiles, wrappers or generated sources changed. Validation: all 16 runner tests and entrypoint checks passed on hosted Linux and Windows from checkout paths containing spaces; stacked Java CI passed 97 backend and 37 Lambda tests without failures/errors/skips; frontend tests/build and scoped diff checks passed. PR #19 is stacked on #18 so one checkout can test both. Full native/browser smoke still requires local Linux/Windows verification.
 
 ---
 
