@@ -304,6 +304,13 @@ public class VideoService {
             return;
         }
 
+        if (update.isAttemptResult() && update.status() == VideoStatus.PLAY_READY
+                && !update.uploadId().equals(update.attemptId()) && update.playlistKey() == null) {
+            log.warn("Ignoring retry success without an attempt-scoped artifact for {} / {}",
+                    update.uploadId(), update.attemptId());
+            return;
+        }
+
         if (update.playlistKey() != null && (!update.isAttemptResult() || update.status() != VideoStatus.PLAY_READY
                 || !S3ObjectKeys.isExecutionPlaylistKey(update.uploadId(), update.attemptId(), update.playlistKey()))) {
             log.warn("Ignoring invalid playback artifact for upload {}", update.uploadId());

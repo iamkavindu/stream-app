@@ -7,4 +7,4 @@ import java.util.UUID;
 public record ProcessingAttemptRecord(
         UUID attemptId, UUID uploadId, boolean active, String stage,
         OffsetDateTime createdAt, OffsetDateTime uploadObservedAt, OffsetDateTime completedAt,
-        String failureCode, String failureDetail, boolean imported) {}
+        String failureCode, String failureDetail, boolean imported, OffsetDateTime queuedAt) {}

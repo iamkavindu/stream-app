@@ -43,6 +43,14 @@ public class BackendExceptionHandler {
         return pd;
     }
 
+    @ExceptionHandler(ProcessingNotRetryableException.class)
+    public ProblemDetail processingNotRetryable(ProcessingNotRetryableException e) {
+        var pd = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
+        pd.setTitle("Processing Not Retryable");
+        pd.setType(ProblemTypes.of("processing-not-retryable"));
+        return pd;
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ProblemDetail validationFailed(MethodArgumentNotValidException e) {
         var detail = e.getBindingResult().getFieldErrors().stream()

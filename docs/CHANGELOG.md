@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-10-17 — SA-013: processing retry UI
+
+Add a separate Retry processing action on failed library items, per-video pending/error state, duplicate-click guard and refresh after accepted or ambiguous responses. Reuse the existing upload without registration/file transfer. Library revisions prevent pre-action list successes/errors from overwriting accepted processing state; disposed views cannot restart refresh. All 105 frontend tests and production/type-check build pass locally. Hosted stacked CI passed 105 frontend tests/build, 105 backend and 37 Lambda tests without failures/errors/skips, plus Linux/Windows runner checks. Real native/browser retry acceptance remains local; see processing-retries.md.
+
+---
+
+## 2026-10-17 — SA-013: durable processing retries
+
+Add V5 queued history and transactional processing outbox; failed videos with existing sources can POST processing-retries for a fresh active attempt. Conditional claims, short transactions, bounded sends and backoff retain intent through SQS outages/restarts; duplicates resend the same explicit job. Preserve old history/hash/source and reject stale results. Native explicit-command identity/replay was confirmed by user logs plus unchanged snapshots/history; original-notification native replay remains unreported. PRs #18/#19 are merged. Hosted CI passed 105 backend and 37 Lambda tests with zero failures/errors/skips, plus frontend and Linux/Windows runner checks. PostgreSQL/Floci retry/concurrency/rollback/outage/duplicate-send regressions passed. The non-initial success artifact guard/regression also passed. Full end-to-end API retry remains local acceptance.
+
+---
+
 ## 2026-10-17 — SA-021 slice 1: one-terminal Linux/Windows startup
 
 Add Bash/PowerShell entry points backed by one standard-library Python runner. Automate local environment, existing Docker/provisioning, backend migration/readiness, cached containerized native worker build, executable layer packaging, S3-backed Lambda deployment and single-message mapping, locked frontend install, process supervision/logs, status and data-preserving stop. Add Linux/Windows runner CI and focused lifecycle/deployment/package regressions; document prerequisites and local acceptance. No application contracts, lockfiles, wrappers or generated sources changed. Validation: all 16 runner tests and entrypoint checks passed on hosted Linux and Windows from checkout paths containing spaces; stacked Java CI passed 97 backend and 37 Lambda tests without failures/errors/skips; frontend tests/build and scoped diff checks passed. PR #19 is stacked on #18 so one checkout can test both. Full native/browser smoke still requires local Linux/Windows verification.

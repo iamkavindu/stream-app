@@ -16,6 +16,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.time.Duration;
 
+import static dev.iamkavindu.streamapp.backend.jooq.tables.ProcessingOutbox.PROCESSING_OUTBOX;
 import static dev.iamkavindu.streamapp.backend.jooq.tables.Videos.VIDEOS;
 import static dev.iamkavindu.streamapp.backend.jooq.tables.ProcessingAttempts.PROCESSING_ATTEMPTS;
 
@@ -48,6 +49,22 @@ public class VideoRepository {
                 .execute();
     }
 
+    /** Caller locks the video first; this transaction also defends against a changed terminal state. */
+    @Transactional
+    public void createProcessingRetry(UUID uploadId, UUID attemptId, String payload) {
+        var now = OffsetDateTime.now();
+        if (dsl.update(VIDEOS).set(VIDEOS.ACTIVE_ATTEMPT_ID, attemptId)
+                .set(VIDEOS.STATUS, VideoStatus.TRANSCODING_IN_PROGRESS.name()).set(VIDEOS.UPDATED_AT, now)
+                .where(VIDEOS.UPLOAD_ID.eq(uploadId)).and(VIDEOS.STATUS.eq(VideoStatus.FAILED.name())).execute() != 1) {
+            throw new IllegalStateException("Processing retry requires a failed video");
+        }
+        dsl.insertInto(PROCESSING_ATTEMPTS).set(PROCESSING_ATTEMPTS.ATTEMPT_ID, attemptId)
+                .set(PROCESSING_ATTEMPTS.UPLOAD_ID, uploadId).set(PROCESSING_ATTEMPTS.STAGE, "QUEUED")
+                .set(PROCESSING_ATTEMPTS.CREATED_AT, now).set(PROCESSING_ATTEMPTS.QUEUED_AT, now).execute();
+        dsl.insertInto(PROCESSING_OUTBOX).set(PROCESSING_OUTBOX.ATTEMPT_ID, attemptId)
+                .set(PROCESSING_OUTBOX.UPLOAD_ID, uploadId).set(PROCESSING_OUTBOX.PAYLOAD, payload).execute();
+    }
+
     public List<ProcessingAttemptRecord> findAttempts(UUID uploadId) {
         return dsl.select(PROCESSING_ATTEMPTS.fields()).select(VIDEOS.ACTIVE_ATTEMPT_ID)
                 .from(PROCESSING_ATTEMPTS).join(VIDEOS)
@@ -60,7 +77,7 @@ public class VideoRepository {
                         r.get(PROCESSING_ATTEMPTS.STAGE), r.get(PROCESSING_ATTEMPTS.CREATED_AT),
                         r.get(PROCESSING_ATTEMPTS.UPLOAD_OBSERVED_AT), r.get(PROCESSING_ATTEMPTS.COMPLETED_AT),
                         r.get(PROCESSING_ATTEMPTS.FAILURE_CODE), r.get(PROCESSING_ATTEMPTS.FAILURE_DETAIL),
-                        r.get(PROCESSING_ATTEMPTS.IMPORTED)));
+                        r.get(PROCESSING_ATTEMPTS.IMPORTED), r.get(PROCESSING_ATTEMPTS.QUEUED_AT)));
     }
 
     public Optional<PlaybackArtifactRecord> findPlaybackArtifact(UUID uploadId) {

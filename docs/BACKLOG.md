@@ -111,8 +111,8 @@ GitHub access is connected. PRs #1–#8 are merged; local verification was confi
 | SA-009 / slice 1 | `feat/sa-009-processing-leases` | Merged in PR #15; hosted CI passed | S3 conditional-write lease/result primitive, with worker integration in the next stacked slice. Competing/expired ownership and durable-result regressions run against Floci. Integration/output isolation is the next stacked slice. |
 | SA-009 / slice 2 | `feat/sa-009-safe-output-publication` | Merged in PR #16; hosted CI passed | 94 backend and 31 Lambda tests pass without skips; frontend CI passes. Fenced execution, immutable output prefixes, media-first publication, retained-result replay and persisted winning playback reference. Native delivery/recovery/seek acceptance required; processing retry and cleanup remain future slices. |
 
-| SA-013 / slice 1 | `feat/sa-013-retry-job-contract` | PR #18 ready for review; hosted CI passed | 97 backend and 37 Lambda tests pass with no failures/errors/skips; frontend CI passed. Explicit-attempt command, shared fixture, real-Floci restart/isolation and duplicate replay regressions. No retry API/dispatcher enabled. Native command acceptance required before dispatch rollout. |
-| SA-021 / slice 1 | `feat/sa-021-local-runner` | PR #19 stacked on #18; hosted CI passed | 16 runner tests per OS and launcher checks pass on hosted Linux/Windows; 97 backend/37 Lambda tests and frontend CI pass. Source-aware native cache, S3-backed deployment and preserving stop. Full Docker/native/browser acceptance remains local. |
+| SA-013 / slice 1 | `feat/sa-013-retry-job-contract` | Merged PR #18; native explicit-command replay confirmed | 97 backend and 37 Lambda tests pass with no failures/errors/skips; frontend CI passed. Explicit-attempt command, shared fixture, real-Floci restart/isolation and duplicate replay regressions. No retry API/dispatcher enabled. Native command acceptance required before dispatch rollout. |
+| SA-021 / slice 1 | `feat/sa-021-local-runner` | Merged PR #19; hosted CI passed | 16 runner tests per OS and launcher checks pass on hosted Linux/Windows; 97 backend/37 Lambda tests and frontend CI pass. Source-aware native cache, S3-backed deployment and preserving stop. Full Docker/native/browser acceptance remains local. |
 
 SA-006 is partial until PowerShell parity and deployed native retry exhaustion are verified; pinned-emulator redrive/replay passed. A DLQ does not settle the database status; reconciliation remains SA-015. This slice does not add lifecycle-aware bulk replay.
 
@@ -121,3 +121,7 @@ SA-006 is partial until PowerShell parity and deployed native retry exhaustion a
 - Slice 2: recover lost registration responses using a durable idempotency key, preserving current duplicate-ready-content conflicts.
 - Slice 3: distinguish abandoned/expired transfer sessions from failed processing and recover eligible expired sessions without permanently reserving their hash. Coordinate this contract with SA-008 before resetting terminal states.
 - Do not mark SA-005 complete until these scenarios and the full ambiguous/concurrent PUT acceptance checks pass.
+
+SA-013 retry API/outbox slice: PR #21 ready for review; hosted CI passed 105 backend/37 Lambda tests without skips, frontend and runner checks. End-to-end retry acceptance remains local. Native explicit command identity/replay confirmed by user with unchanged result/artifacts/history; original-notification replay remains unreported.
+
+SA-013 UI slice: PR #22 ready for review, stacked on PR #21. Hosted 105 frontend tests/build, 105 backend/37 Lambda tests without skips and Linux/Windows runner checks pass. Native/browser action acceptance remains local.
