@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-17 — SA-021 slice 1: one-terminal Linux/Windows startup
+
+Add Bash/PowerShell entry points backed by one standard-library Python runner. Automate local environment, existing Docker/provisioning, backend migration/readiness, cached containerized native worker build, executable layer packaging, S3-backed Lambda deployment and single-message mapping, locked frontend install, process supervision/logs, status and data-preserving stop. Add Linux/Windows runner CI and focused lifecycle/deployment/package regressions; document prerequisites and local acceptance. No application contracts, lockfiles, wrappers or generated sources changed. Validation pending hosted runner/app CI; full native/browser smoke requires local Linux/Windows verification.
+
+---
+
 ## 2026-10-15 — SA-013 preparation: explicit attempt processing commands
 
 Add a versioned direct SQS job contract in backend and Lambda, a shared fixture, native hints, and worker routing by explicit attempt. Initial S3 notifications remain bound to the initial attempt. Validate source ownership/layout before storage access; invalid commands fail for queue redrive. Regressions cover contract rejection, distinct initial/retry leases and outputs, and duplicate result replay. PRs #15/#16 are merged; no additional local acceptance is inferred from merger. No retry API or dispatcher is enabled. First hosted worker build caught a local variable collision, corrected without weakening assertions. Hosted rerun passed 97 backend and 37 Lambda tests with zero failures/errors/skips, including real-Floci attempt isolation/restart and duplicate replay; frontend tests/build passed. Shared DTO parity, fixture JSON, native probe Bash/Python syntax and scoped diff checks pass. Native command acceptance is required before dispatch rollout.

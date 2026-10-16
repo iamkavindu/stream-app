@@ -666,3 +666,9 @@ Before enabling retry dispatch, deploy the rebuilt native worker and send the sh
 Exact Linux native probe commands: [processing-command-acceptance.md](./processing-command-acceptance.md).
 
 PR #18 hosted Java 25/Docker validation passed 97 backend and 37 Lambda tests with zero failures/errors/skips; frontend tests/build passed. Real-Floci storage tests verify retained explicit-attempt results across worker restart and isolation from a later initial notification. CI uses synthetic output for these recovery cases; deployed native command parsing remains the local checkpoint.
+
+## One-terminal application runner (SA-021 slice 1)
+
+Repository-root `run-local.sh` and `run-local.ps1` call one Python 3.10+ standard-library runner for Linux/Windows. It supplies fixed local child environment, starts existing DB/Floci Compose services, precreates demo buckets, invokes the existing container bootstrap, starts/migrates backend, builds Linux amd64 native Lambda in GraalVM 25 Docker when sources change, publishes layer/code through S3, verifies queue settings and mapping readiness, installs locked frontend dependencies, and supervises app processes/logs in ignored `.local-run/`. No host AWS CLI or GraalVM/WSL build shell is required. Existing bootstrap/CORS ownership remains; SA-020 is not declared complete.
+
+JDK 25+, supported Node, Python and Linux/x86_64 Docker are prerequisites. Existing worker mapping is paused/drained before code replacement. Ctrl+C stops owned app processes; explicit `down` stops infrastructure without volume/data removal. Cached native builds and existing FFmpeg layers speed later starts. New runner checks cover both entry points and lifecycle/deployment contracts on Linux/Windows; full native/browser acceptance remains local. See [local-run.md](./local-run.md) for one-command start, environment, logs, cache controls and recovery.

@@ -2,6 +2,16 @@
 
 Video upload and HLS streaming platform. Clients upload MP4 files via presigned S3 URLs; the backend tracks metadata, deduplicates by SHA-256, and orchestrates FFmpeg transcode to fMP4 HLS for browser playback.
 
+## Run locally from one terminal
+
+Linux: `./run-local.sh`
+
+Windows PowerShell: `powershell -NoProfile -ExecutionPolicy Bypass -File .\run-local.ps1`
+
+The runner sets local environment values, starts Docker infrastructure, provisions Floci, builds/deploys the native Lambda, and starts backend/frontend with logs in `.local-run/`. First setup takes several minutes; later runs reuse native/layer caches. Open http://localhost:5173 when ready. Ctrl+C stops app processes; add `down` to stop Docker services while preserving data.
+
+Prerequisites, status/rebuild commands and troubleshooting: [local run guide](docs/local-run.md).
+
 ## Details
 
 - **Upload:** Vue SPA hashes files locally (SHA-256), requests a presigned PUT URL, uploads directly to object storage, and supports per-file retry on failure. Duplicate uploads return RFC 7807 `409` responses.

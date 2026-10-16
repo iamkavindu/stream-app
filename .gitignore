@@ -16,3 +16,9 @@ Thumbs.db
 
 # Local Floci persistence
 docker/infra/aws/data/
+
+# Local runner logs, downloads and build cache
+.local-run/
+
+# Python runner/test bytecode
+scripts/local/**/__pycache__/

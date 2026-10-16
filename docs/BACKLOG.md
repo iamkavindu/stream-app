@@ -112,6 +112,7 @@ GitHub access is connected. PRs #1–#8 are merged; local verification was confi
 | SA-009 / slice 2 | `feat/sa-009-safe-output-publication` | Merged in PR #16; hosted CI passed | 94 backend and 31 Lambda tests pass without skips; frontend CI passes. Fenced execution, immutable output prefixes, media-first publication, retained-result replay and persisted winning playback reference. Native delivery/recovery/seek acceptance required; processing retry and cleanup remain future slices. |
 
 | SA-013 / slice 1 | `feat/sa-013-retry-job-contract` | PR #18 ready for review; hosted CI passed | 97 backend and 37 Lambda tests pass with no failures/errors/skips; frontend CI passed. Explicit-attempt command, shared fixture, real-Floci restart/isolation and duplicate replay regressions. No retry API/dispatcher enabled. Native command acceptance required before dispatch rollout. |
+| SA-021 / slice 1 | `feat/sa-021-local-runner` | PR #19 stacked on #18; validation pending | Shared Python lifecycle with Linux/Windows launchers, source-aware native cache, S3-backed deployment and preserving stop. Local full Docker/native/browser acceptance remains required. |
 
 SA-006 is partial until PowerShell parity and deployed native retry exhaustion are verified; pinned-emulator redrive/replay passed. A DLQ does not settle the database status; reconciliation remains SA-015. This slice does not add lifecycle-aware bulk replay.
 
