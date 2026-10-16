@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useProcessingRetry } from '@/features/stream/composables/useProcessingRetry'
 import { useStreamPlayback } from '@/features/stream/composables/useStreamPlayback'
 import HlsPlayer from '@/features/stream/ui/HlsPlayer.vue'
 import VideoPlaylistItem from '@/features/stream/ui/VideoPlaylistItem.vue'
@@ -15,7 +16,11 @@ const {
   shouldPoll,
   loadVideos,
   selectVideo,
+  refreshAfterProcessingRetry,
 } = useStreamPlayback()
+
+const processing = useProcessingRetry(refreshAfterProcessingRetry)
+const { pending: retryPending, errors: retryErrors } = processing
 
 const playbackError = ref<string | null>(null)
 
@@ -86,13 +91,26 @@ function onPlaybackError(message: string): void {
         </p>
 
         <div v-else class="flex max-h-[32rem] flex-col gap-3 overflow-y-auto pr-1">
-          <VideoPlaylistItem
-            v-for="video in videos"
-            :key="video.uploadId"
-            :video="video"
-            :selected="selectedUploadId === video.uploadId"
-            @select="onSelect"
-          />
+          <div v-for="video in videos" :key="video.uploadId" class="space-y-2">
+            <VideoPlaylistItem
+              :video="video"
+              :selected="selectedUploadId === video.uploadId"
+              @select="onSelect"
+            />
+            <div v-if="video.status === 'FAILED'" class="px-2">
+              <button type="button"
+                class="text-sm font-medium text-sky-700 disabled:text-slate-400"
+                :disabled="retryPending.has(video.uploadId)"
+                :data-testid="`retry-processing-${video.uploadId}`"
+                @click="processing.retry(video.uploadId)">
+                {{ retryPending.has(video.uploadId) ? 'Requesting retry…' : 'Retry processing' }}
+              </button>
+              <p class="text-xs text-slate-500">Uses the existing upload; no file transfer.</p>
+            </div>
+            <p v-if="retryErrors[video.uploadId]" role="alert" class="px-2 text-sm text-red-700">
+              {{ retryErrors[video.uploadId] }}
+            </p>
+          </div>
         </div>
       </div>
 

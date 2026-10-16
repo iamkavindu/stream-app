@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { ref } from 'vue'
 import type { VideoRecord } from '@/features/stream/types'
 import StreamPanel from '@/features/stream/ui/StreamPanel.vue'
+import { retryProcessing } from '@/features/stream/api/processingRetryApi'
+vi.mock('@/features/stream/api/processingRetryApi', () => ({ retryProcessing: vi.fn() }))
 
 const baseVideo: VideoRecord = {
   uploadId: '550e8400-e29b-41d4-a716-446655440000',
@@ -22,6 +24,7 @@ const playerError = ref<string | null>(null)
 const shouldPoll = ref(false)
 const loadVideos = vi.fn()
 const selectVideo = vi.fn()
+const refreshAfterProcessingRetry = vi.fn().mockResolvedValue(undefined)
 
 vi.mock('@/features/stream/composables/useStreamPlayback', () => ({
   useStreamPlayback: () => ({
@@ -35,6 +38,7 @@ vi.mock('@/features/stream/composables/useStreamPlayback', () => ({
     shouldPoll,
     loadVideos,
     selectVideo,
+    refreshAfterProcessingRetry,
   }),
 }))
 
@@ -124,4 +128,37 @@ describe('StreamPanel', () => {
     await wrapper.get('[data-testid="refresh-videos"]').trigger('click')
     expect(loadVideos).toHaveBeenCalled()
   })
+  it('shows processing retry only for failed videos', () => {
+    videos.value = [{ ...baseVideo, status: 'FAILED' }, { ...baseVideo, uploadId: 'ready' }]
+    listLoading.value = false
+    listError.value = null
+    const wrapper = mount(StreamPanel, { global: { stubs: { VideoPlaylistItem: true, HlsPlayer: true } } })
+    expect(wrapper.findAll('button').filter((b) => b.text() === 'Retry processing')).toHaveLength(1)
+    wrapper.unmount()
+  })
+  it('disables retry while pending and reconciles accepted state', async () => {
+    videos.value = [{ ...baseVideo, status: 'FAILED' }]
+    let done!: () => void
+    vi.mocked(retryProcessing).mockClear().mockReturnValueOnce(new Promise<void>((resolve) => { done = resolve }))
+    const wrapper = mount(StreamPanel, { global: { stubs: { VideoPlaylistItem: true, HlsPlayer: true } } })
+    const button = wrapper.get(`[data-testid="retry-processing-${baseVideo.uploadId}"]`)
+    await button.trigger('click')
+    expect(button.attributes('disabled')).toBeDefined()
+    await button.trigger('click')
+    expect(retryProcessing).toHaveBeenCalledTimes(1)
+    done()
+    await flushPromises()
+    expect(refreshAfterProcessingRetry).toHaveBeenCalledWith(baseVideo.uploadId, true)
+    wrapper.unmount()
+  })
+  it('renders actionable backend conflict details', async () => {
+    videos.value = [{ ...baseVideo, status: 'FAILED' }]
+    vi.mocked(retryProcessing).mockRejectedValueOnce(new Error('The original upload is missing'))
+    const wrapper = mount(StreamPanel, { global: { stubs: { VideoPlaylistItem: true, HlsPlayer: true } } })
+    await wrapper.get(`[data-testid="retry-processing-${baseVideo.uploadId}"]`).trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[role="alert"]').text()).toContain('The original upload is missing')
+    wrapper.unmount()
+  })
+
 })

@@ -20,6 +20,7 @@ export function useStreamPlayback() {
 
   let pollTimer: ReturnType<typeof setTimeout> | null = null
   let disposed = false
+  let libraryRevision = 0
   let selectionVersion = 0
   let consecutiveListFailures = 0
   let listRequest: Promise<void> | null = null
@@ -62,10 +63,11 @@ export function useStreamPlayback() {
     if (!options.silent) listLoading.value = true
     listError.value = null
 
+    const revision = libraryRevision
     listRequest = (async () => {
       try {
         const response = await listVideos()
-        if (disposed) return
+        if (disposed || revision !== libraryRevision) return
         const previousSelected = videos.value.find(
           (video) => video.uploadId === selectedUploadId.value,
         )
@@ -87,7 +89,7 @@ export function useStreamPlayback() {
           }
         }
       } catch (error) {
-        if (disposed) return
+        if (disposed || revision !== libraryRevision) return
         listError.value = getErrorMessage(error)
         consecutiveListFailures = Math.min(consecutiveListFailures + 1, 3)
       } finally {
@@ -99,6 +101,19 @@ export function useStreamPlayback() {
       }
     })()
     return listRequest
+  }
+
+  async function refreshAfterProcessingRetry(id: string, accepted: boolean): Promise<void> {
+    if (disposed) return
+    libraryRevision++
+    if (accepted) {
+      videos.value = videos.value.map((video) => video.uploadId === id
+        ? { ...video, status: 'TRANSCODING_IN_PROGRESS' as const } : video)
+      const selected = videos.value.find((video) => video.uploadId === selectedUploadId.value)
+      if (selected?.uploadId === id) void selectVideo(selected)
+    }
+    if (listRequest) await listRequest
+    if (!disposed) await loadVideos({ silent: true })
   }
 
   async function selectVideo(video: VideoRecord): Promise<void> {
@@ -145,6 +160,7 @@ export function useStreamPlayback() {
     shouldPoll,
     loadVideos,
     selectVideo,
+    refreshAfterProcessingRetry,
   }
 }
 

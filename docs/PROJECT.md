@@ -686,3 +686,7 @@ Use `streamapp.processing.dispatch.enabled=false` to pause dispatch; pending int
 PR #21 hosted CI passed 104 backend and 37 Lambda tests with no failures/errors/skips, plus frontend and Linux/Windows runner checks. V1-to-V5 existing-data migration and real PostgreSQL/Floci retry, rollback, concurrent claims and SQS delivery recovery tests passed. This does not replace native API-to-worker-to-result acceptance.
 
 Non-initial PLAY_READY messages must include their validated attempt-scoped playlistKey; a missing key is ignored so retries cannot fall back to initial legacy output. Initial messages retain legacy compatibility. A dedicated regression covers rejection followed by valid settlement.
+
+### Processing retry UI
+
+Failed library items offer Retry processing as a distinct action from upload transfer retry. Per-video pending state blocks repeated clicks and server conflict details are shown. Accepted retries immediately enter processing; list/history are reconciled after success or ambiguous failure, with revision guards against stale list responses and disposal guards against late callbacks. No file bytes are reselected or uploaded. Local frontend verification passed 105 tests and production/type-check build. This UI is stacked on PR #21; follow [processing-retries.md](./processing-retries.md) for one-terminal native/browser acceptance before declaring the end-to-end feature complete.

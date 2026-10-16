@@ -329,4 +329,25 @@ describe('useStreamPlayback', () => {
     expect(playback.manifestUrl.value).toBeNull()
     expect(playback.playerError.value).toBeNull()
   })
+  it.each(['success', 'failure'] as const)('ignores a pre-retry list %s and refreshes the accepted attempt', async (outcome) => {
+    const failed = { ...baseVideo, status: 'FAILED' as const }
+    const stale = deferred<VideoRecord[]>()
+    const fresh = deferred<VideoRecord[]>()
+    vi.mocked(listVideos).mockResolvedValueOnce([failed]).mockReturnValueOnce(stale.promise).mockReturnValueOnce(fresh.promise)
+    const playback = mountPlayback()
+    await flushPromises()
+    const oldRefresh = playback.loadVideos()
+    const retryRefresh = playback.refreshAfterProcessingRetry(baseVideo.uploadId, true)
+    expect(playback.videos.value[0]?.status).toBe('TRANSCODING_IN_PROGRESS')
+    if (outcome === 'success') stale.resolve([failed])
+    else stale.reject(new Error('Stale failure'))
+    await oldRefresh
+    await flushPromises()
+    expect(playback.videos.value[0]?.status).toBe('TRANSCODING_IN_PROGRESS')
+    expect(playback.listError.value).toBeNull()
+    fresh.resolve([{ ...baseVideo, status: 'TRANSCODING_IN_PROGRESS' }])
+    await retryRefresh
+    expect(playback.shouldPoll.value).toBe(true)
+  })
+
 })

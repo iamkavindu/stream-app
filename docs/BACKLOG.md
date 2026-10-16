@@ -123,3 +123,5 @@ SA-006 is partial until PowerShell parity and deployed native retry exhaustion a
 - Do not mark SA-005 complete until these scenarios and the full ambiguous/concurrent PUT acceptance checks pass.
 
 SA-013 retry API/outbox slice: PR #21 ready for review; hosted CI passed 104 backend/37 Lambda tests without skips, frontend and runner checks. End-to-end retry acceptance remains local. Native explicit command identity/replay confirmed by user with unchanged result/artifacts/history; original-notification replay remains unreported.
+
+SA-013 UI slice: `feat/sa-013-processing-retry-ui`, stacked on PR #21. Local 105 frontend tests and build pass; hosted checks and native/browser action acceptance pending.

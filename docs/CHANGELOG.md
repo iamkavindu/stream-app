@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-17 — SA-013: processing retry UI
+
+Add a separate Retry processing action on failed library items, per-video pending/error state, duplicate-click guard and refresh after accepted or ambiguous responses. Reuse the existing upload without registration/file transfer. Library revisions prevent pre-action list successes/errors from overwriting accepted processing state; disposed views cannot restart refresh. All 105 frontend tests and production/type-check build pass locally. Hosted stacked CI and real native/browser retry acceptance remain pending; see processing-retries.md.
+
+---
+
 ## 2026-10-17 — SA-013: durable processing retries
 
 Add V5 queued history and transactional processing outbox; failed videos with existing sources can POST processing-retries for a fresh active attempt. Conditional claims, short transactions, bounded sends and backoff retain intent through SQS outages/restarts; duplicates resend the same explicit job. Preserve old history/hash/source and reject stale results. Native explicit-command identity/replay was confirmed by user logs plus unchanged snapshots/history; original-notification native replay remains unreported. PRs #18/#19 are merged. Hosted CI passed 104 backend and 37 Lambda tests with zero failures/errors/skips, plus frontend and Linux/Windows runner checks. PostgreSQL/Floci retry/concurrency/rollback/outage/duplicate-send regressions passed. Added a final guard/regression requiring non-initial success to carry its own manifest reference; rerun pending for this addition. Full end-to-end API retry remains local acceptance.
