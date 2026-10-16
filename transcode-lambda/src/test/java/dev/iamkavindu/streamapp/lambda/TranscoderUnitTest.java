@@ -60,20 +60,21 @@ class TranscoderUnitTest {
                 .getBytes(StandardCharsets.UTF_8);
         when(leaseStore.acquire(any(), any())).thenAnswer(invocation -> {
             UUID id = invocation.getArgument(0);
-            return leases.computeIfAbsent(id, key -> new ProcessingLeaseStore.Lease(id, id, UUID.randomUUID(),
+            UUID attempt = invocation.getArgument(1);
+            return leases.computeIfAbsent(attempt, key -> new ProcessingLeaseStore.Lease(id, attempt, UUID.randomUUID(),
                     UUID.randomUUID().toString(), java.time.Instant.now().plusSeconds(600), null));
         });
         when(leaseStore.complete(any(), any())).thenAnswer(invocation -> {
             ProcessingLeaseStore.Lease lease = invocation.getArgument(0);
             String result = invocation.getArgument(1);
-            leases.put(lease.uploadId(), new ProcessingLeaseStore.Lease(lease.uploadId(), lease.attemptId(),
+            leases.put(lease.attemptId(), new ProcessingLeaseStore.Lease(lease.uploadId(), lease.attemptId(),
                     lease.executionId(), lease.etag(), lease.expiresAt(), result));
             return result;
         });
         doAnswer(invocation -> {
             ProcessingLeaseStore.Lease lease = invocation.getArgument(0);
-            var current = leases.get(lease.uploadId());
-            if (current != null && current.completedResult() == null) leases.remove(lease.uploadId());
+            var current = leases.get(lease.attemptId());
+            if (current != null && current.completedResult() == null) leases.remove(lease.attemptId());
             return null;
         }).when(leaseStore).release(any());
         when(sqsClient.getQueueUrl(org.mockito.ArgumentMatchers.<Consumer<GetQueueUrlRequest.Builder>>any()))
@@ -271,6 +272,38 @@ class TranscoderUnitTest {
         } finally {
             Thread.interrupted();
         }
+    }
+
+    @Test
+    void directJobKeepsRetrySeparateFromInitialNotificationAndReplaysIdentically() {
+        var job = MessagingFixtures.loadTemplate("messaging/processing-job-v1.json");
+        var id = MessagingFixtures.SAMPLE_UPLOAD_ID;
+        var attempt = UUID.fromString("660e8400-e29b-41d4-a716-446655440000");
+        var retryPayload = MessagingFixtures.sqsLambdaEnvelope(job).getBytes(StandardCharsets.UTF_8);
+        transcoder.transcodeVideo().accept(retryPayload);
+        var retryResult = resultMessages.getLast();
+        assertThat(mapper.readTree(retryResult).path("attemptId").asText()).isEqualTo(attempt.toString());
+        assertThat(mapper.readTree(retryResult).path("playlistKey").asText())
+                .startsWith(id + "/attempts/" + attempt + "/executions/");
+        transcoder.transcodeVideo().accept(retryPayload);
+        assertThat(resultMessages.getLast()).isEqualTo(retryResult);
+        assertThat(workDirs).hasSize(1);
+        transcoder.transcodeVideo().accept(MessagingFixtures.sqsLambdaEnvelope(id, "demo.mp4")
+                .getBytes(StandardCharsets.UTF_8));
+        assertThat(mapper.readTree(resultMessages.getLast()).path("attemptId").asText()).isEqualTo(id.toString());
+        assertThat(leases).containsKeys(id, attempt);
+        assertThat(workDirs).hasSize(2);
+        assertWorkDirsCleaned();
+    }
+
+    @Test
+    void invalidDirectJobFailsBeforeClaimOrSourceAccess() {
+        var job = MessagingFixtures.loadTemplate("messaging/processing-job-v1.json").replace("TRANSCODE", "DELETE");
+        assertThatThrownBy(() -> transcoder.transcodeVideo().accept(
+                MessagingFixtures.sqsLambdaEnvelope(job).getBytes(StandardCharsets.UTF_8)))
+                .isInstanceOf(RuntimeException.class);
+        org.mockito.Mockito.verifyNoInteractions(leaseStore, s3Client, sqsClient);
+        assertThat(workDirs).isEmpty();
     }
 
     private void assertWorkDirsCleaned() {

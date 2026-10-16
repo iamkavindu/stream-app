@@ -1,0 +1,52 @@
+name: Local runner CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: local-runner-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  runner:
+    name: Local runner (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025]
+    defaults:
+      run:
+        working-directory: app workspace
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+          path: app workspace
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.13'
+      - name: Test lifecycle and deployment contracts
+        run: python -m unittest discover -s scripts/local/tests -v
+      - name: Check Linux entry point
+        if: runner.os == 'Linux'
+        run: |
+          bash -n run-local.sh
+          ./run-local.sh --help
+      - name: Check Windows entry point
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $parseErrors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PWD 'run-local.ps1'), [ref]$null, [ref]$parseErrors) | Out-Null
+          if ($parseErrors) { throw ($parseErrors | Out-String) }
+          ./run-local.ps1 --help
+      - name: Confirm dependency manifests unchanged
+        run: git diff --exit-code -- frontend/package.json frontend/package-lock.json backend/pom.xml transcode-lambda/pom.xml

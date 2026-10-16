@@ -50,6 +50,7 @@ public class S3ReflectionHints implements RuntimeHintsRegistrar {
 
         Class<?>[] eventTypes = {
             dev.iamkavindu.streamapp.lambda.coordination.ProcessingLeaseStore.LeaseDocument.class,
+            dev.iamkavindu.streamapp.lambda.model.ProcessingJobRecord.class,
             VideoStatusUpdateRecord.class,
             VideoStatus.class
         };

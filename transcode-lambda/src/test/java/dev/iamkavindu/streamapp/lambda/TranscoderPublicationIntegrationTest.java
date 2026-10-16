@@ -88,6 +88,38 @@ class TranscoderPublicationIntegrationTest {
                 .isNotEqualTo(partial.getFirst().key().substring(0, partial.getFirst().key().lastIndexOf('/')));
     }
 
+    @Test
+    void explicitAttemptSurvivesRestartAndDoesNotReuseInitialCoordination() {
+        var id = source();
+        var attempt = UUID.randomUUID();
+        var sends = new ArrayList<String>();
+        var runs = new AtomicInteger();
+        var queue = queue(sends, new AtomicInteger());
+        var job = new dev.iamkavindu.streamapp.lambda.model.ProcessingJobRecord(
+                1, "TRANSCODE", id, attempt, id + "/demo.mp4");
+        var payload = MessagingFixtures.sqsLambdaEnvelope(mapper.writeValueAsString(job))
+                .getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        worker(s3, queue, runs).transcodeVideo().accept(payload);
+        var retryFiles = outputs(id);
+        var result = mapper.readTree(sends.getFirst());
+        assertThat(result.path("attemptId").asText()).isEqualTo(attempt.toString());
+        assertThat(result.path("playlistKey").asText()).startsWith(id + "/attempts/" + attempt + "/");
+        var retained = s3.getObjectAsBytes(r -> r.bucket("streamapp-streams")
+                .key("_processing/" + id + "/" + attempt + ".json")).asUtf8String();
+        assertThat(mapper.readTree(retained).path("completedResult").asText()).isEqualTo(sends.getFirst());
+        worker(s3, queue, runs).transcodeVideo().accept(payload);
+        assertThat(runs.get()).isEqualTo(1);
+        assertThat(sends.getLast()).isEqualTo(sends.getFirst());
+        assertThat(outputs(id)).isEqualTo(retryFiles);
+        worker(s3, queue, runs).transcodeVideo().accept(MessagingFixtures.sqsLambdaEnvelope(id, "demo.mp4")
+                .getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        assertThat(runs.get()).isEqualTo(2);
+        assertThat(outputs(id)).hasSize(4);
+        assertThat(mapper.readTree(sends.getLast()).path("attemptId").asText()).isEqualTo(id.toString());
+        assertThat(s3.getObjectAsBytes(r -> r.bucket("streamapp-streams")
+                .key("_processing/" + id + "/" + attempt + ".json")).asUtf8String()).isEqualTo(retained);
+    }
+
     private UUID source() {
         var id = UUID.randomUUID();
         s3.putObject(r -> r.bucket("streamapp-uploads").key(id + "/demo.mp4"), RequestBody.fromString("source"));
