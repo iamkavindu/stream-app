@@ -683,10 +683,12 @@ Flyway V5 adds truthful QUEUED/queuedAt and a persisted outbox body atomically w
 
 Use `streamapp.processing.dispatch.enabled=false` to pause dispatch; pending intent is retained. Test scheduling is disabled and tests explicitly drive dispatch. Deploy the V5 backend only with the PR #18 worker already deployed; PRs #18/#19 are merged. The user confirmed native explicit attempt identity, duplicate invocation replay/202 and unchanged retained result/artifacts/backend history for attempt 67cc2815-c800-4922-a8e4-9a5b0f30431c. Original-notification native replay is still unreported, not assumed from merger. Full end-to-end API retry remains a new local acceptance checkpoint.
 
-PR #21 hosted CI passed 104 backend and 37 Lambda tests with no failures/errors/skips, plus frontend and Linux/Windows runner checks. V1-to-V5 existing-data migration and real PostgreSQL/Floci retry, rollback, concurrent claims and SQS delivery recovery tests passed. This does not replace native API-to-worker-to-result acceptance.
+PR #21 hosted CI passed 105 backend and 37 Lambda tests with no failures/errors/skips, plus frontend and Linux/Windows runner checks. V1-to-V5 existing-data migration and real PostgreSQL/Floci retry, rollback, concurrent claims and SQS delivery recovery tests passed. This does not replace native API-to-worker-to-result acceptance.
 
 Non-initial PLAY_READY messages must include their validated attempt-scoped playlistKey; a missing key is ignored so retries cannot fall back to initial legacy output. Initial messages retain legacy compatibility. A dedicated regression covers rejection followed by valid settlement.
 
 ### Processing retry UI
 
 Failed library items offer Retry processing as a distinct action from upload transfer retry. Per-video pending state blocks repeated clicks and server conflict details are shown. Accepted retries immediately enter processing; list/history are reconciled after success or ambiguous failure, with revision guards against stale list responses and disposal guards against late callbacks. No file bytes are reselected or uploaded. Local frontend verification passed 105 tests and production/type-check build. This UI is stacked on PR #21; follow [processing-retries.md](./processing-retries.md) for one-terminal native/browser acceptance before declaring the end-to-end feature complete.
+
+PR #22 hosted frontend CI passed all 105 tests and production/type-check build; stacked Java CI passed 105 backend and 37 Lambda tests with no failures/errors/skips, plus Linux/Windows runner checks. Native/browser API-to-outbox-to-worker acceptance remains the local checkpoint.
